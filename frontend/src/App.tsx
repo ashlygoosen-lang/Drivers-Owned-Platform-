@@ -24,7 +24,7 @@ const NAV = [['Services', 'services'], ['Driver Ownership', 'ownership'], ['How 
 
 type ModalState =
   | { kind: 'booking'; draft: TripDraft; existing?: Booking | null }
-  | { kind: 'auth' } | { kind: 'driver' } | { kind: 'dashboard' } | { kind: 'info'; topic: string } | null;
+  | { kind: 'auth' } | { kind: 'driver' } | { kind: 'dashboard'; tab?: string } | { kind: 'info'; topic: string } | null;
 
 const howSteps: Record<string, [string, string][]> = {
   Passengers: [['Create your account', 'Set up your passenger profile in under a minute.'], ['Choose your ride', 'Enter your destination and see your upfront fare, with no passenger commission.'], ['Sit back. You’re on your way.', 'Follow your trip status, share it with someone you trust and enjoy the ride.']],
@@ -88,7 +88,7 @@ function Page() {
   const title = modal?.kind === 'booking' ? modalTitle || `${modal.draft.service} · Let’s get you moving`
     : modal?.kind === 'auth' ? 'Welcome to DROP.'
     : modal?.kind === 'driver' ? 'Your next chapter starts here.'
-    : modal?.kind === 'dashboard' ? `${user?.role === 'admin' ? 'Super Admin' : user?.role ? user.role[0].toUpperCase() + user.role.slice(1) : ''} dashboard`
+    : modal?.kind === 'dashboard' ? ({ admin: 'Super Admin dashboard', compliance: 'Compliance dashboard', support: 'Support desk', passenger: 'My DROP', driver: 'Driver dashboard', business: 'Business dashboard' } as Record<string, string>)[user?.role || ''] || 'Dashboard'
     : modalTitle;
 
   return <div>
@@ -236,10 +236,10 @@ function Page() {
     <button aria-label="Back to top" onClick={goHome} className={`to-top fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-xl bg-forest text-white shadow-lg ${progress > .15 ? 'is-visible' : ''}`}><svg className="absolute inset-0 -rotate-90" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="none" stroke="#ff6b00" strokeWidth="2" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - progress)} /></svg><Icon name="up" size={18} /></button>
 
     {modal && <Modal key={modal.kind} title={title} wide={modal.kind === 'booking' || modal.kind === 'dashboard'} onClose={close} eyebrow={modal.kind === 'dashboard' ? 'MY DROP' : undefined}>
-      {modal.kind === 'booking' && <BookingFlow draft={modal.draft} existing={modal.existing} onTitle={setModalTitle} onNotice={setNotice} onClose={close} />}
-      {modal.kind === 'auth' && <AuthForm onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />}
-      {modal.kind === 'driver' && <DriverApply onDashboard={() => setModal({ kind: 'dashboard' })} />}
-      {modal.kind === 'dashboard' && (user ? <Dashboard onBook={() => book()} onTrack={(b) => { setModalTitle(''); setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b }); }} onOwnership={() => info('Driver ownership')} onNotice={setNotice} onSignedOut={close} /> : <AuthForm onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />)}
+      {modal.kind === 'booking' && <BookingFlow draft={modal.draft} existing={modal.existing} onTitle={setModalTitle} onNotice={setNotice} onClose={close} onVerify={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
+      {modal.kind === 'auth' && <AuthForm onDone={(u) => setModal({ kind: 'dashboard', tab: ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
+      {modal.kind === 'driver' && <DriverApply onDashboard={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
+      {modal.kind === 'dashboard' && (user ? <Dashboard key={modal.tab || 'Overview'} initialTab={modal.tab} onBook={() => book()} onTrack={(b) => { setModalTitle(''); setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b }); }} onOwnership={() => info('Driver ownership')} onNotice={setNotice} onSignedOut={close} /> : <AuthForm onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />)}
       {modal.kind === 'info' && <InfoPanel topic={modal.topic} onBook={() => book()} onDriver={driver} onApps={() => go('apps')} onNotice={setNotice} onClose={close} onOpen={info} />}
     </Modal>}
 

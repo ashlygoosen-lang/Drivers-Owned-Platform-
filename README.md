@@ -20,6 +20,9 @@ docs/       Brand guide and apps roadmap
 | Passengers | Sign up / sign in, upfront fare estimates, book Ride / Delivery / Premium Drive (now or scheduled), live trip status, share trip, SOS (10111), cancel, rate driver, trip history, saved places, payment preference, support tickets |
 | Drivers | Two-step application with ID, licence and vehicle documents (PDF/JPG/PNG, 5 MB), application tracking, go online once approved, accept requests, trip status updates (arriving → on trip → complete), earnings dashboard, release trip |
 | Business | Business accounts, bookings for travellers, team list, monthly invoices from completed trips, business-account payment |
+| Verification (KYC) | Everyone uploads ID and proof of address; drivers add a selfie with ID, driving licence, PrDP, vehicle registration and insurance; businesses add CIPC registration. SA ID numbers are checked, files are content-checked and encrypted at rest, and each document is approved or rejected with a reason. Expiry tracking and reminders. See `docs/VERIFICATION.md` |
+| Compliance officer | Verification queue, side-by-side document review, approve/reject with reasons, final decision, expiring documents, audit log |
+| Support agent | Tickets, enquiries, user and trip look-up (no access to ID documents) |
 | Super Admin | Approve / decline driver applications, view uploaded documents securely, manage users and drivers (suspend / reinstate), all bookings, support tickets with replies, website enquiries |
 | Public | Contact / business / careers / report-an-issue forms, live fee table, safety, privacy and terms summaries |
 
@@ -42,7 +45,7 @@ The Express server serves the built site and the API from one service.
 
 1. New project → deploy from this GitHub repo (root directory `/`). `railway.json` sets `npm run build` / `npm start`.
 2. **Attach a volume** mounted at `/data` (it holds the database and driver documents).
-3. Variables: `NODE_ENV=production`, `JWT_SECRET`, `DATA_DIR=/data`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, optional `DRIVER_SERVICE_FEE_RATE`, `CONTACT_EMAIL`.
+3. Variables: `NODE_ENV=production`, `JWT_SECRET`, `FILE_ENCRYPTION_KEY`, `DATA_DIR=/data`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, optional `PASSENGER_VERIFICATION`, optional `DRIVER_SERVICE_FEE_RATE`, `CONTACT_EMAIL`.
 4. Generate a domain. Health check: `/api/health`.
 
 To host the frontend separately, build it with `VITE_API_URL=https://your-api-domain` and set `CORS_ORIGINS` on the API.

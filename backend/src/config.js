@@ -42,3 +42,7 @@ export const COMPANY = {
   email: process.env.CONTACT_EMAIL || 'hello@drop.co.za',
   city: 'Cape Town, South Africa',
 };
+
+// Passengers and business accounts must submit identity documents before booking.
+// 'submitted' = may book while documents are being reviewed; 'verified' = only after approval; 'off' = not required.
+export const PASSENGER_VERIFICATION = (process.env.PASSENGER_VERIFICATION || 'submitted').toLowerCase();

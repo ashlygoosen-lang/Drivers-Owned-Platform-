@@ -16,7 +16,9 @@ const EMPTY = {
   applications: [],
   tickets: [],
   enquiries: [],
-  subscribers: [],
+  verifications: [],
+  notifications: [],
+  audit: [],
   counters: { booking: 1000, application: 100, ticket: 100, enquiry: 100 },
 };
 

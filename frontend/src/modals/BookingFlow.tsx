@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, money, STATUS_LABEL, type Booking, type Quote, type Service } from '../lib/api';
+import { api, money, STATUS_LABEL, type ApiError, type Booking, type Quote, type Service } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { AuthForm } from './AuthForm';
 import { button, outline, input, Field, ErrorText, Icon, MapView, Spinner } from '../components/ui';
@@ -24,8 +24,8 @@ export function bookingTitle(service: Service, step: Step, booking?: Booking | n
   return `${service} · ${step === 'options' ? 'Choose your journey' : 'Let’s get you moving'}`;
 }
 
-export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
-  draft: TripDraft; existing?: Booking | null; onTitle: (t: string) => void; onNotice: (m: string) => void; onClose: () => void;
+export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVerify }: {
+  draft: TripDraft; existing?: Booking | null; onTitle: (t: string) => void; onNotice: (m: string) => void; onClose: () => void; onVerify: () => void;
 }) {
   const { user } = useAuth();
   const [service, setService] = useState<Service>(draft.service);
@@ -44,6 +44,7 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
   const [step, setStep] = useState<Step>(existing ? 'tracking' : draft.pickup && draft.destination ? 'options' : 'details');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [needsVerify, setNeedsVerify] = useState(false);
 
   useEffect(() => { onTitle(bookingTitle(service, step, booking)); }, [service, step, booking, onTitle]);
 
@@ -74,8 +75,9 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
 
   async function confirm() {
     if (!user) { setStep('auth'); return; }
-    if (user.role === 'driver' || user.role === 'admin') { setError('Please book from a passenger or business account.'); return; }
+    if (!['passenger', 'business'].includes(user.role)) { setError('Please book from a passenger or business account.'); return; }
     setError('');
+    setNeedsVerify(false);
     setBusy(true);
     try {
       const res = await api<{ booking: Booking }>('/bookings', {
@@ -83,7 +85,10 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
       });
       setBooking(res.booking);
       setStep('tracking');
-    } catch (err) { setError((err as Error).message); }
+    } catch (err) {
+      setError((err as Error).message);
+      setNeedsVerify((err as ApiError).code === 'verification_required');
+    }
     finally { setBusy(false); }
   }
 
@@ -144,7 +149,7 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
             <div className="flex justify-between text-forest"><span>Passenger platform commission</span><b>R 0</b></div>
             <div className="flex justify-between text-[12px] text-[#505d71]"><span>Your driver keeps</span><span>{money(selected.driverEarnings)} after the disclosed {Math.round(quote.serviceFeeRate * 100)}% DROP service fee</span></div>
           </div>}
-          <ErrorText>{error}</ErrorText>
+          {needsVerify ? <div className="grid gap-3 rounded-xl bg-navy p-4 text-sm text-white"><p className="flex items-start gap-3"><Icon name="shield" size={22} className="shrink-0 text-orange" /><span>{error}<br /><span className="text-[#c9d3e3]">You’ll need your ID and a proof of address dated within 3 months.</span></span></p><button className="motion-button gold-button inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 font-bold text-navy" onClick={onVerify}>Verify my identity <Icon name="arrow" size={16} /></button></div> : <ErrorText>{error}</ErrorText>}
           <button className={button} disabled={busy || !selected} onClick={confirm}>{busy && <Spinner />}Confirm {service === 'Delivery' ? 'delivery' : 'booking'}{selected && ` · ${money(selected.fare)}`}<Icon name="arrow" size={17} /></button>
           <button className="min-h-11 text-sm underline" onClick={() => setStep('details')}>Edit journey</button>
         </>}

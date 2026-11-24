@@ -14,6 +14,8 @@ import driverRoutes from './routes/drivers.js';
 import supportRoutes from './routes/support.js';
 import dashboardRoutes from './routes/dashboard.js';
 import adminRoutes from './routes/admin.js';
+import verificationRoutes from './routes/verification.js';
+import complianceRoutes from './routes/compliance.js';
 
 export function createApp() {
   const app = express();
@@ -48,11 +50,12 @@ export function createApp() {
   app.use('/api', limiter(600));
   app.use(['/api/auth/login', '/api/auth/register'], limiter(25));
   app.use(['/api/enquiries', '/api/drivers/apply'], limiter(15));
+  app.post('/api/verification/documents', limiter(60));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'drop-api', time: now() }));
   app.get('/api/company', (_req, res) => res.json(COMPANY));
   app.use('/api/auth', authRoutes);
-  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, adminRoutes);
+  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, adminRoutes);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Serve the built React app (single-service deploy) with SPA fallback.
@@ -71,12 +74,12 @@ export function createApp() {
     // Remove any documents saved for a request that then failed.
     for (const f of Object.values(req.files || {}).flat()) fs.promises.unlink(f.path).catch(() => {});
     if (err instanceof multer.MulterError) {
-      return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Each document must be 5 MB or smaller.' : 'There was a problem with the uploaded files.' });
+      return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Each document must be 8 MB or smaller.' : 'There was a problem with the uploaded files.' });
     }
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid request body.' });
     const status = err.status || 500;
     if (status >= 500) console.error('[drop]', err);
-    res.status(status).json({ error: status >= 500 ? 'Something went wrong on our side. Please try again.' : err.message });
+    res.status(status).json({ error: status >= 500 ? 'Something went wrong on our side. Please try again.' : err.message, ...(status < 500 && typeof err.code === 'string' && !err.code.startsWith('E') && { code: err.code }) });
   });
 
   return app;

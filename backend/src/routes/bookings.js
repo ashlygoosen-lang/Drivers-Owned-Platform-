@@ -3,6 +3,8 @@ import { db, id, now, nextRef } from '../db.js';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { quote, PLACES, CATEGORIES } from '../pricing.js';
 import { str, int, oneOf, wrap, bad, HttpError } from '../validate.js';
+import { PASSENGER_VERIFICATION } from '../config.js';
+import { getVerification, recompute } from '../kyc.js';
 
 const router = Router();
 const SERVICES = Object.keys(CATEGORIES);
@@ -36,8 +38,24 @@ export function view(b, viewer) {
   return out;
 }
 
+function verificationGate(user) {
+  if (PASSENGER_VERIFICATION === 'off') return;
+  if (!['passenger', 'business'].includes(user.role)) throw new HttpError(403, 'Please book from a passenger or business account.');
+  const v = getVerification(user.id);
+  recompute(v);
+  const ok = PASSENGER_VERIFICATION === 'verified' ? ['verified'] : ['submitted', 'verified'];
+  if (!ok.includes(v.status)) {
+    const err = new HttpError(403, PASSENGER_VERIFICATION === 'verified' && v.status === 'submitted'
+      ? 'Your documents are being reviewed. You can book as soon as your account is verified.'
+      : 'Please verify your identity before your first booking. It takes about 3 minutes.');
+    err.code = 'verification_required';
+    throw err;
+  }
+}
+
 router.post('/bookings', requireAuth, wrap(async (req, res) => {
   const b = req.body || {};
+  verificationGate(req.user);
   const trip = tripInput(b);
   const q = quote(trip);
   const option = q.options.find((o) => o.category === trip.category);

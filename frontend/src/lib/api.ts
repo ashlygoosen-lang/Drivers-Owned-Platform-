@@ -2,7 +2,8 @@
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 const KEY = 'drop.token';
 
-export type Role = 'passenger' | 'driver' | 'business' | 'admin';
+export type Role = 'passenger' | 'driver' | 'business' | 'admin' | 'compliance' | 'support';
+export const STAFF_ROLES: Role[] = ['admin', 'compliance', 'support'];
 export type Service = 'Ride' | 'Delivery' | 'Premium Drive';
 export type BookingStatus = 'requested' | 'accepted' | 'arriving' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -10,7 +11,7 @@ export interface User {
   id: string; name: string; email: string; phone: string; role: Role; company?: string;
   driverStatus?: 'pending' | 'approved' | 'suspended'; online?: boolean; vehicle?: string; rating?: number | null;
   savedPlaces?: { home: string; work: string }; paymentPreference?: string; notifications?: string;
-  employees?: Employee[]; disabled?: boolean; createdAt: string;
+  employees?: Employee[]; disabled?: boolean; createdAt: string; verificationStatus?: VerificationStatus;
 }
 export interface Employee { id: string; name: string; email: string; department: string; addedAt: string }
 export interface FareOption { category: string; description: string; seats: number; fare: number; passengerCommission: number; driverServiceFee: number; driverEarnings: number; etaMin: number }
@@ -35,8 +36,19 @@ export interface Stat { label: string; value: number; money?: boolean }
 export interface DashboardData { stats: Stat[]; chart: { title: string; money?: boolean; data: { day: string; value: number }[] }; driverStatus?: string; online?: boolean; rating?: number | null; invoices?: { ref: string; period: string; trips: number; total: number; status: string }[] }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string) { super(message); }
 }
+
+export type VerificationStatus = 'not_started' | 'in_progress' | 'submitted' | 'action_required' | 'verified';
+export type DocStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+export interface VerificationDoc { id: string; type: string; mime: string; ext: string; originalName: string; size: number; status: DocStatus; reason: string; expiresAt: string | null; issuedAt: string | null; uploadedAt: string; reviewedAt: string | null; reviewedBy: string | null; archived?: boolean }
+export interface Requirement { type: string; required: boolean; label: string; hint: string; expires: boolean; maxAgeDays?: number; imageOnly?: boolean }
+export interface VerificationProfile { legalName?: string; idType?: 'sa_id' | 'passport'; idNumber?: string; dateOfBirth?: string; nationality?: string; addressLine1?: string; addressLine2?: string; suburb?: string; city?: string; province?: string; postalCode?: string; emergencyName?: string; emergencyPhone?: string; companyName?: string; registrationNumber?: string; vatNumber?: string }
+export interface Verification { id: string; userId: string; role: Role; status: VerificationStatus; profile: VerificationProfile; missingProfile: string[]; documents: VerificationDoc[]; requirements: Requirement[]; history: { status: string; at: string; by?: string; note?: string }[]; consentAt: string | null; submittedAt: string | null; decidedAt: string | null; decisionNote: string }
+export interface QueueItem { userId: string; role: Role; status: VerificationStatus; submittedAt: string | null; decidedAt: string | null; name: string; email: string; phone: string; documents: { total: number; pending: number; rejected: number } }
+export interface Notice { id: string; title: string; body: string; link: string; read: boolean; createdAt: string }
+export interface AuditEntry { id: string; actorName: string; actorRole: string; action: string; subjectId: string; subjectName: string; detail: Record<string, string>; at: string }
+export const VERIFICATION_LABEL: Record<VerificationStatus, string> = { not_started: 'Not started', in_progress: 'In progress', submitted: 'Under review', action_required: 'Action required', verified: 'Verified' };
 
 export const token = {
   get(): string | null { try { return localStorage.getItem(KEY); } catch { return null; } },
@@ -59,8 +71,15 @@ export async function api<T>(path: string, options: { method?: string; body?: un
     throw new ApiError(0, 'We could not reach DROP. Please check your connection and try again.');
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.error || 'Something went wrong. Please try again.');
+  if (!res.ok) throw new ApiError(res.status, data.error || 'Something went wrong. Please try again.', data.code);
   return data as T;
+}
+
+/** Fetch a protected file and return an object URL (caller revokes it). */
+export async function protectedBlobUrl(path: string) {
+  const res = await fetch(BASE + path, { headers: { authorization: `Bearer ${token.get()}` } });
+  if (!res.ok) throw new ApiError(res.status, 'Could not open this document.');
+  return URL.createObjectURL(await res.blob());
 }
 
 /** Fetch a protected file (e.g. an uploaded document) and open it in a new tab. */

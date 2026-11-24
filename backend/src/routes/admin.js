@@ -3,12 +3,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, now } from '../db.js';
 import { UPLOAD_DIR } from '../config.js';
-import { requireRole, publicUser } from '../auth.js';
+import { requireRole, publicUser, hashPassword, STAFF_ROLES } from '../auth.js';
+import { getVerification, recompute } from '../kyc.js';
+import { id as newId } from '../db.js';
+import { email, password } from '../validate.js';
 import { view } from './bookings.js';
 import { str, oneOf, wrap, bad, HttpError } from '../validate.js';
 
 const router = Router();
-router.use('/admin', requireRole('admin'));
+const adminOnly = requireRole('admin');
+const supportDesk = requireRole('admin', 'support');
+const lookup = requireRole('admin', 'support', 'compliance');
+// Route-level access: support agents handle tickets, enquiries and look-ups; compliance reviews
+// verification (routes/compliance.js); everything else is Super Admin only.
+router.use('/admin', (req, res, next) => {
+  const p = req.path;
+  if (/^\/(tickets|enquiries)/.test(p)) return supportDesk(req, res, next);
+  if (req.method === 'GET' && /^\/(users|bookings)/.test(p)) return lookup(req, res, next);
+  return adminOnly(req, res, next);
+});
 
 const page = (list, req) => {
   const q = String(req.query.q || '').toLowerCase().trim();
@@ -29,6 +42,11 @@ router.patch('/admin/users/:id', wrap(async (req, res) => {
   if (req.body.disabled !== undefined) patch.disabled = Boolean(req.body.disabled);
   if (req.body.driverStatus !== undefined && user.role === 'driver') {
     patch.driverStatus = oneOf(req.body.driverStatus, ['pending', 'approved', 'suspended'], 'Driver status');
+    if (patch.driverStatus === 'approved') {
+      const v = getVerification(user.id);
+      recompute(v);
+      if (v.status !== 'verified') throw bad('This driver’s documents must be verified before they can drive.');
+    }
     if (patch.driverStatus !== 'approved') patch.online = false;
   }
   res.json({ user: publicUser(db.update('users', user.id, patch)) });
@@ -37,7 +55,7 @@ router.patch('/admin/users/:id', wrap(async (req, res) => {
 router.get('/admin/applications', (req, res) => {
   const apps = page(db.all('applications'), req).map((a) => {
     const u = db.find('users', (x) => x.id === a.userId);
-    return { ...a, applicant: u ? { name: u.name, email: u.email, phone: u.phone } : null };
+    return { ...a, applicant: u ? { name: u.name, email: u.email, phone: u.phone } : null, verificationStatus: u?.verificationStatus || 'not_started' };
   });
   res.json({ applications: apps });
 });
@@ -46,6 +64,11 @@ router.patch('/admin/applications/:id', wrap(async (req, res) => {
   const app = db.find('applications', (a) => a.id === req.params.id);
   if (!app) throw new HttpError(404, 'Application not found.');
   const status = oneOf(req.body.status, ['under_review', 'approved', 'rejected'], 'Status');
+  if (status === 'approved') {
+    const v = getVerification(app.userId);
+    recompute(v);
+    if (v.status !== 'verified') throw bad('Approve this driver’s identity documents in the Verification queue first.');
+  }
   const checks = status === 'approved'
     ? { identity: 'verified', inspection: 'passed', activation: 'active' }
     : status === 'rejected' ? { ...app.checks, activation: 'declined' } : { ...app.checks, identity: 'in review' };
@@ -57,6 +80,7 @@ router.patch('/admin/applications/:id', wrap(async (req, res) => {
     reviewedAt: now(),
   });
   db.update('users', app.userId, { driverStatus: status === 'approved' ? 'approved' : 'pending', ...(status !== 'approved' && { online: false }) });
+  if (status === 'rejected') db.insert('notifications', { id: newId(), userId: app.userId, title: 'Driver application update', body: updated.notes || 'Your application was not approved.', link: 'application', read: false, createdAt: now() });
   res.json({ application: updated });
 }));
 
@@ -98,6 +122,32 @@ router.patch('/admin/enquiries/:id', wrap(async (req, res) => {
   const e = db.find('enquiries', (x) => x.id === req.params.id);
   if (!e) throw new HttpError(404, 'Enquiry not found.');
   res.json({ enquiry: db.update('enquiries', e.id, { status: oneOf(req.body.status, ['new', 'contacted', 'closed'], 'Status') }) });
+}));
+
+// Staff accounts: Super Admin creates compliance officers, support agents and other admins.
+router.get('/admin/staff', (req, res) => {
+  res.json({ staff: db.filter('users', (u) => STAFF_ROLES.includes(u.role)).map(publicUser) });
+});
+
+router.post('/admin/staff', wrap(async (req, res) => {
+  const b = req.body || {};
+  const addr = email(b.email);
+  if (db.find('users', (u) => u.email === addr)) throw new HttpError(409, 'An account with this email already exists.');
+  const user = db.insert('users', {
+    id: newId(), name: str(b.name, 'Full name', { min: 2, max: 80 }), email: addr, phone: '',
+    role: oneOf(b.role, STAFF_ROLES, 'Role'), passwordHash: await hashPassword(password(b.password)), createdAt: now(), createdBy: req.user.email,
+  });
+  res.status(201).json({ user: publicUser(user) });
+}));
+
+router.patch('/admin/staff/:id', wrap(async (req, res) => {
+  const user = db.find('users', (u) => u.id === req.params.id && STAFF_ROLES.includes(u.role));
+  if (!user) throw new HttpError(404, 'Staff member not found.');
+  if (user.id === req.user.id) throw bad('You cannot change your own staff role or access.');
+  const patch = {};
+  if (req.body.role) patch.role = oneOf(req.body.role, STAFF_ROLES, 'Role');
+  if (req.body.disabled !== undefined) patch.disabled = Boolean(req.body.disabled);
+  res.json({ user: publicUser(db.update('users', user.id, patch)) });
 }));
 
 export default router;

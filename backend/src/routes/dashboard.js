@@ -49,6 +49,7 @@ router.get('/dashboard', requireAuth, (req, res) => {
       ],
       chart: { title: 'Earnings · last 7 days', money: true, data: week(done, 'completedAt', 'driverEarnings') },
       driverStatus: u.driverStatus,
+      verificationStatus: u.verificationStatus || 'not_started',
       online: u.online,
       rating: u.rating || null,
     });
@@ -67,6 +68,38 @@ router.get('/dashboard', requireAuth, (req, res) => {
       invoices: monthlyInvoices(done),
     });
   }
+  if (u.role === 'compliance') {
+    const vs = db.all('verifications');
+    const today = new Date().toISOString().slice(0, 10);
+    const soon = new Date(Date.now() + 30 * DAY).toISOString().slice(0, 10);
+    const expiring = vs.flatMap((v) => v.documents.filter((d) => !d.archived && d.expiresAt && d.expiresAt <= soon && d.status === 'approved')).length;
+    const reviews = db.filter('audit', (a) => a.action.startsWith('document.') || a.action.startsWith('verification.approved'));
+    return res.json({
+      stats: [
+        { label: 'Awaiting review', value: vs.filter((v) => v.status === 'submitted').length },
+        { label: 'Waiting on customer', value: vs.filter((v) => v.status === 'action_required').length },
+        { label: 'Verified accounts', value: vs.filter((v) => v.status === 'verified').length },
+        { label: 'Drivers awaiting review', value: vs.filter((v) => v.status === 'submitted' && v.role === 'driver').length },
+        { label: 'Documents expiring in 30 days', value: expiring },
+        { label: 'Reviewed today', value: reviews.filter((a) => a.at.startsWith(today)).length },
+      ],
+      chart: { title: 'Document reviews · last 7 days', data: week(reviews, 'at') },
+    });
+  }
+  if (u.role === 'support') {
+    const tickets = db.all('tickets');
+    return res.json({
+      stats: [
+        { label: 'Open tickets', value: tickets.filter((t) => t.status === 'open').length },
+        { label: 'In progress', value: tickets.filter((t) => t.status === 'in_progress').length },
+        { label: 'Urgent safety tickets', value: tickets.filter((t) => t.priority === 'urgent' && t.status !== 'resolved').length },
+        { label: 'New enquiries', value: db.filter('enquiries', (e) => e.status === 'new').length },
+        { label: 'Active trips', value: db.filter('bookings', (b) => ['accepted', 'arriving', 'in_progress'].includes(b.status)).length },
+        { label: 'Resolved tickets', value: tickets.filter((t) => t.status === 'resolved').length },
+      ],
+      chart: { title: 'New tickets · last 7 days', data: week(tickets) },
+    });
+  }
   if (u.role === 'admin') {
     const all = db.all('bookings');
     const done = all.filter((b) => b.status === 'completed');
@@ -78,6 +111,9 @@ router.get('/dashboard', requireAuth, (req, res) => {
         { label: 'Service fee revenue', value: sum(done, 'driverServiceFee'), money: true },
         { label: 'Pending applications', value: db.filter('applications', (a) => ['submitted', 'under_review'].includes(a.status)).length },
         { label: 'Open tickets', value: db.filter('tickets', (t) => t.status !== 'resolved').length },
+        { label: 'Verifications awaiting review', value: db.filter('verifications', (v) => v.status === 'submitted').length },
+        { label: 'Verified customers', value: db.filter('verifications', (v) => v.status === 'verified' && v.role !== 'driver').length },
+        { label: 'Trips in progress', value: all.filter((b) => ['accepted', 'arriving', 'in_progress'].includes(b.status)).length },
       ],
       chart: { title: 'Bookings · last 7 days', data: week(all) },
     });

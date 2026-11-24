@@ -3,34 +3,20 @@ import { api, date, money, openProtectedFile, STATUS_LABEL, type Application, ty
 import { useAuth } from '../lib/auth';
 import { button, outline, input, Field, ErrorText, Icon, MapView, Spinner, StatusPill } from '../components/ui';
 import { Counter } from '../motion/Counter';
+import { useLoad, Loading, Empty, Table, type Notify } from './common';
+import { VerificationCentre, VerificationBanner } from './Verification';
+import { VerificationQueue, ExpiringDocuments, AuditLog } from './Compliance';
+import { StaffManager, Notifications } from './Staff';
+import { VERIFICATION_LABEL } from '../lib/api';
 
 const TABS = {
-  passenger: ['Overview', 'Book a ride', 'My trips', 'Places & payment', 'Profile', 'Support'],
-  driver: ['Overview', 'Ride requests', 'Trip history', 'Application', 'Ownership', 'Profile', 'Support'],
-  business: ['Overview', 'Company bookings', 'Employees', 'Invoices', 'Account', 'Support'],
-  admin: ['Overview', 'Applications', 'Drivers', 'Users', 'Bookings', 'Tickets', 'Enquiries'],
+  passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Places & payment', 'Notifications', 'Profile', 'Support'],
+  driver: ['Overview', 'Verification', 'Ride requests', 'Trip history', 'Vehicle & application', 'Ownership', 'Notifications', 'Profile', 'Support'],
+  business: ['Overview', 'Verification', 'Company bookings', 'Employees', 'Invoices', 'Notifications', 'Account', 'Support'],
+  compliance: ['Overview', 'Verification queue', 'Expiring documents', 'Audit log', 'Notifications', 'Profile'],
+  support: ['Overview', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
+  admin: ['Overview', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications'],
 } as const;
-
-type Notify = (m: string) => void;
-
-function useLoad<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState('');
-  const reload = useCallback(async () => {
-    if (!path) return;
-    try { setData(await api<T>(path)); setError(''); } catch (err) { setError((err as Error).message); }
-  }, [path]);
-  useEffect(() => { void reload(); }, [reload]);
-  return { data, error, reload };
-}
-
-function Loading() { return <p className="flex items-center gap-3 py-6 text-sm text-[#505d71]"><Spinner /> Loading…</p>; }
-function Empty({ children }: { children: React.ReactNode }) { return <p className="rounded-xl border border-dashed border-[#cbd2dc] p-6 text-center text-sm text-[#505d71]">{children}</p>; }
-
-function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
-  return <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b border-[#d1dae5]">{head.map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead>
-    <tbody>{rows.map((r, i) => <tr key={i} className="table-row border-b border-[#dee4ed] align-top">{r.map((c, j) => <td key={j} className="p-3">{c}</td>)}</tr>)}</tbody></table></div>;
-}
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
   const { data, error } = useLoad<DashboardData>('/dashboard');
@@ -125,13 +111,13 @@ function DriverRequests({ notify }: { notify: Notify }) {
   const load = useCallback(async () => { try { setState(await api('/drivers/requests')); } catch (err) { setError((err as Error).message); } }, []);
   useEffect(() => { void load(); const t = setInterval(load, 6000); return () => clearInterval(t); }, [load]);
   if (!user) return null;
-  const approved = user.driverStatus === 'approved';
+  const approved = user.driverStatus === 'approved' && user.verificationStatus === 'verified';
   const act = async (path: string, msg: string) => { try { await api(path, { body: {} }); notify(msg); setError(''); void load(); } catch (err) { setError((err as Error).message); } };
   const toggle = async () => { try { setUser((await api<{ user: User }>('/drivers/online', { body: { online: !user.online } })).user); setTimeout(load, 50); } catch (err) { setError((err as Error).message); } };
   const a = state?.active;
   const NEXT: Record<string, string> = { accepted: 'I’m on my way to pickup', arriving: 'Passenger collected · start trip', in_progress: 'Complete trip' };
   return <div className="grid gap-4">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#ebeff4] p-4"><p className="text-sm">{approved ? (user.online ? 'You’re online and visible for new requests.' : 'Go online to receive ride and delivery requests.') : 'Your account is awaiting activation. You can go online once your application is approved.'}</p><button className={user.online ? button : outline} aria-pressed={!!user.online} disabled={!approved} onClick={toggle}>{user.online ? '● Online' : '○ Go online'}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#ebeff4] p-4"><p className="text-sm">{approved ? (user.online ? 'You’re online and visible for new requests.' : 'Go online to receive ride and delivery requests.') : (user.verificationStatus === 'submitted' ? 'Your documents are being reviewed. You can go online as soon as they are approved.' : 'Complete your verification (Verification tab) to go online and accept trips.')}</p><button className={user.online ? button : outline} aria-pressed={!!user.online} disabled={!approved} onClick={toggle}>{user.online ? '● Online' : '○ Go online'}</button></div>
     <ErrorText>{error}</ErrorText>
     {a && <div className="rounded-xl border border-forest bg-[#e6ecf3] p-5"><StatusPill status={STATUS_LABEL[a.status]} /><h4 className="mt-3 font-semibold">{a.pickup} → {a.destination}</h4><p className="my-2 text-sm">{a.passenger?.name}{a.passenger?.phone && <> · <a className="underline" href={`tel:${a.passenger.phone}`}>{a.passenger.phone}</a></>}<br />{a.distanceKm} km · {money(a.fare)} fare · you keep {money(a.driverEarnings)} · {a.payment}{a.notes && <><br />Note: {a.notes}</>}{a.parcel && <><br />Parcel: {a.parcel}</>}</p>
       <div className="flex flex-wrap gap-3"><button className={button} onClick={() => act(`/drivers/bookings/${a.id}/advance`, a.status === 'in_progress' ? `Trip ${a.ref} complete. ${money(a.driverEarnings)} added to your earnings.` : 'Trip updated.')}>{NEXT[a.status]}</button>{a.status !== 'in_progress' && <button className={outline} onClick={() => act(`/bookings/${a.id}/cancel`, 'Trip released back to other drivers.')}>Release trip</button>}</div>
@@ -144,9 +130,9 @@ function DriverApplication() {
   const { data } = useLoad<{ application: Application | null }>('/drivers/application');
   if (!data) return <Loading />;
   const a = data.application;
-  if (!a) return <Empty>No application on file.</Empty>;
+  if (!a) return <Empty>No vehicle application on file.</Empty>;
   return <div className="grid gap-4 text-sm"><div className="flex items-center gap-3"><b>{a.ref}</b><StatusPill status={a.status} /></div>
-    <Table head={['Check', 'Status']} rows={[['Documents', <StatusPill key="d" status="received" />], ['Identity verification', <StatusPill key="i" status={a.checks.identity} />], ['Vehicle inspection', <StatusPill key="v" status={a.checks.inspection} />], ['Account activation', <StatusPill key="a" status={a.checks.activation} />]]} />
+    <Table head={['Check', 'Status']} rows={[['Identity & documents', <StatusPill key="i" status={a.status === 'approved' ? 'verified' : a.checks.identity} />], ['Vehicle inspection', <StatusPill key="v" status={a.checks.inspection} />], ['Account activation', <StatusPill key="a" status={a.checks.activation} />]]} />
     <p>Vehicle: {a.vehicle} · Programme: {a.participation}{a.city && ` · ${a.city}`}</p>{a.notes && <p className="rounded-lg bg-[#e6ecf3] p-3">Note from onboarding: {a.notes}</p>}</div>;
 }
 
@@ -182,22 +168,23 @@ function AdminApplications({ notify }: { notify: Notify }) {
     try { await api(`/admin/applications/${a.id}`, { method: 'PATCH', body: { status, notes } }); notify(`${a.ref} marked ${status.replace('_', ' ')}.`); void reload(); } catch (err) { notify((err as Error).message); }
   };
   return <div className="grid gap-4">{data.applications.map((a) => <div key={a.id} className="rounded-xl border border-[#d2dae4] p-5 text-sm">
-    <div className="flex flex-wrap items-center justify-between gap-3"><b>{a.ref} · {a.applicant?.name}</b><StatusPill status={a.status} /></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><b>{a.ref} · {a.applicant?.name}</b><span className="flex gap-2"><StatusPill status={`documents: ${VERIFICATION_LABEL[(a as Application & { verificationStatus?: keyof typeof VERIFICATION_LABEL }).verificationStatus || 'not_started']}`} /><StatusPill status={a.status} /></span></div>
     <p className="my-2 text-[#505d71]">{a.applicant?.email} · {a.applicant?.phone} · {a.participation} · {a.city} · {a.vehicle} · {date(a.createdAt)}</p>
-    <div className="my-3 flex flex-wrap gap-2">{Object.entries(a.documents).map(([k, d]) => <button key={k} className="flex min-h-10 items-center gap-2 rounded-lg bg-[#e6ecf3] px-3 text-[13px]" onClick={() => openProtectedFile(`/admin/files/${d.file}`).catch((e) => notify(e.message))}><Icon name="file" size={15} />{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</button>)}</div>
-    {a.status !== 'approved' && <div className="flex flex-wrap gap-2">{a.status === 'submitted' && <button className={outline} onClick={() => decide(a, 'under_review')}>Start review</button>}<button className={button} onClick={() => decide(a, 'approved')}>Approve & activate</button>{a.status !== 'rejected' && <button className="min-h-11 px-3 text-red-800 underline" onClick={() => decide(a, 'rejected')}>Decline</button>}</div>}
+    <p className="mb-2 text-[13px] text-[#5b6b82]">Identity documents are reviewed in the Verification queue. Approving the documents activates the driver automatically.</p>
+    <div className="my-3 flex flex-wrap gap-2">{Object.entries(a.documents || {}).map(([k, d]) => <button key={k} className="flex min-h-10 items-center gap-2 rounded-lg bg-[#e6ecf3] px-3 text-[13px]" onClick={() => openProtectedFile(`/admin/files/${d.file}`).catch((e) => notify(e.message))}><Icon name="file" size={15} />{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</button>)}</div>
+    {a.status !== 'approved' && <div className="flex flex-wrap gap-2">{a.status === 'submitted' && <button className={outline} onClick={() => decide(a, 'under_review')}>Start review</button>}<button className={button} onClick={() => decide(a, 'approved')}>Approve application</button>{a.status !== 'rejected' && <button className="min-h-11 px-3 text-red-800 underline" onClick={() => decide(a, 'rejected')}>Decline</button>}</div>}
   </div>)}</div>;
 }
 
-function AdminUsers({ role, notify }: { role?: string; notify: Notify }) {
+function AdminUsers({ role, notify, readOnly = false }: { role?: string; notify: Notify; readOnly?: boolean }) {
   const [q, setQ] = useState('');
   const { data, reload } = useLoad<{ users: User[] }>(`/admin/users?${new URLSearchParams({ ...(role && { role }), q })}`);
   const patch = async (u: User, body: object) => { try { await api(`/admin/users/${u.id}`, { method: 'PATCH', body }); notify('User updated.'); void reload(); } catch (err) { notify((err as Error).message); } };
   return <div className="grid gap-4"><input className={input} placeholder="Search by name, email or phone" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search users" />
     {!data ? <Loading /> : !data.users.length ? <Empty>No users found.</Empty> : <Table head={['Name', 'Contact', 'Role', 'Status', '']} rows={data.users.map((u) => [
       <span key="n"><b>{u.name}</b>{u.company && <span className="block text-[12px]">{u.company}</span>}</span>, <span key="c">{u.email}<span className="block text-[12px]">{u.phone}</span></span>, u.role,
-      <StatusPill key="s" status={u.disabled ? 'suspended' : u.role === 'driver' ? `${u.driverStatus}${u.online ? ' · online' : ''}` : 'active'} />,
-      <span key="a" className="flex flex-wrap gap-2">{u.role === 'driver' && u.driverStatus === 'approved' && <button className="text-[13px] underline" onClick={() => patch(u, { driverStatus: 'suspended' })}>Suspend driving</button>}{u.role === 'driver' && u.driverStatus === 'suspended' && <button className="text-[13px] underline" onClick={() => patch(u, { driverStatus: 'approved' })}>Reinstate</button>}{u.role !== 'admin' && <button className="text-[13px] underline" onClick={() => patch(u, { disabled: !u.disabled })}>{u.disabled ? 'Enable account' : 'Disable account'}</button>}</span>,
+      <span key="s" className="flex flex-wrap gap-1"><StatusPill status={u.disabled ? 'suspended' : u.role === 'driver' ? `${u.driverStatus}${u.online ? ' · online' : ''}` : 'active'} />{['passenger', 'driver', 'business'].includes(u.role) && <StatusPill status={VERIFICATION_LABEL[u.verificationStatus || 'not_started']} />}</span>,
+      readOnly ? <span key="a" /> : <span key="a" className="flex flex-wrap gap-2">{u.role === 'driver' && u.driverStatus === 'approved' && <button className="text-[13px] underline" onClick={() => patch(u, { driverStatus: 'suspended' })}>Suspend driving</button>}{u.role === 'driver' && u.driverStatus === 'suspended' && <button className="text-[13px] underline" onClick={() => patch(u, { driverStatus: 'approved' })}>Reinstate</button>}{u.role !== 'admin' && <button className="text-[13px] underline" onClick={() => patch(u, { disabled: !u.disabled })}>{u.disabled ? 'Enable account' : 'Disable account'}</button>}</span>,
     ])} />}</div>;
 }
 
@@ -226,27 +213,43 @@ function AdminEnquiries({ notify }: { notify: Notify }) {
 }
 
 /* ---------------- Shell ---------------- */
-export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut }: { onSignedOut: () => void; onBook: () => void; onTrack: (b: Booking) => void; onOwnership: () => void; onNotice: Notify }) {
-  const { user, signOut } = useAuth();
-  const [tab, setTab] = useState('Overview');
+export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut, initialTab = 'Overview' }: { onSignedOut: () => void; onBook: () => void; onTrack: (b: Booking) => void; onOwnership: () => void; onNotice: Notify; initialTab?: string }) {
+  const { user, signOut, refresh } = useAuth();
+  const [tab, setTab] = useState(initialTab);
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    const poll = () => api<{ unread: number }>('/notifications').then((r) => setUnread(r.unread)).catch(() => {});
+    poll(); const t = setInterval(poll, 20000); return () => clearInterval(t);
+  }, [tab]);
+  useEffect(() => { void refresh(); }, [tab, refresh]);
   if (!user) return null;
-  const tabs = TABS[user.role];
+  const tabs = TABS[user.role] as readonly string[];
+  const customer = ['passenger', 'driver', 'business'].includes(user.role);
+  const openLink = (link: string) => setTab(({ verification: 'Verification', queue: 'Verification queue', application: 'Vehicle & application' } as Record<string, string>)[link] || 'Overview');
+  const overviewAction = { driver: ['View ride requests', () => setTab('Ride requests')], admin: ['Open verification queue', () => setTab('Verification queue')], compliance: ['Open verification queue', () => setTab('Verification queue')], support: ['Open tickets', () => setTab('Tickets')] } as Record<string, [string, () => void]>;
+  const [actionLabel, action] = overviewAction[user.role] || ['Book a journey', onBook];
   const view = () => {
     switch (tab) {
-      case 'Overview': return <Overview onAction={() => user.role === 'driver' ? setTab('Ride requests') : user.role === 'admin' ? setTab('Applications') : onBook()} actionLabel={user.role === 'driver' ? 'View ride requests' : user.role === 'admin' ? 'Review driver applications' : 'Book a journey'} />;
+      case 'Overview': return <>{customer && <VerificationBanner status={user.verificationStatus || 'not_started'} onOpen={() => setTab('Verification')} />}<Overview onAction={action} actionLabel={actionLabel} /></>;
+      case 'Verification': return <VerificationCentre notify={onNotice} onDone={() => void refresh()} />;
+      case 'Verification queue': return <VerificationQueue notify={onNotice} />;
+      case 'Expiring documents': return <ExpiringDocuments notify={onNotice} />;
+      case 'Audit log': return <AuditLog />;
+      case 'Staff': return <StaffManager notify={onNotice} />;
+      case 'Notifications': return <Notifications onOpen={openLink} />;
       case 'My trips': case 'Company bookings': return <Trips onTrack={onTrack} onBook={onBook} />;
       case 'Trip history': return <Trips onTrack={onTrack} driver />;
       case 'Places & payment': return <ProfileForm notify={onNotice} places />;
       case 'Profile': case 'Account': return <ProfileForm notify={onNotice} />;
       case 'Support': return <Support notify={onNotice} />;
       case 'Ride requests': return <DriverRequests notify={onNotice} />;
-      case 'Application': return <DriverApplication />;
+      case 'Vehicle & application': return <DriverApplication />;
       case 'Ownership': return <div className="text-sm leading-7"><h4 className="mb-3 text-lg font-semibold">Participation, membership & equity</h4><p>As a DROP driver you may apply for the driver-owner programme. Membership and formal equity are distinct: joining or driving does not automatically grant shares. Eligibility, legal structure, voting rights and any equity allocation are set out in formal programme documents and agreements.</p><button onClick={onOwnership} className={`${outline} mt-5`}>View programme overview</button></div>;
       case 'Employees': return <Employees notify={onNotice} />;
       case 'Invoices': return <Invoices />;
       case 'Applications': return <AdminApplications notify={onNotice} />;
       case 'Drivers': return <AdminUsers role="driver" notify={onNotice} />;
-      case 'Users': return <AdminUsers notify={onNotice} />;
+      case 'Users': return <AdminUsers notify={onNotice} readOnly={user.role !== 'admin'} />;
       case 'Bookings': return <AdminBookings />;
       case 'Tickets': return <AdminTickets notify={onNotice} />;
       case 'Enquiries': return <AdminEnquiries notify={onNotice} />;
@@ -254,10 +257,11 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut 
     }
   };
   return <div>
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#e3eaf2] p-3 text-sm"><span>Signed in as <b>{user.name}</b> · {user.email}{user.role === 'driver' && user.driverStatus !== 'approved' && ' · activation pending'}</span><button className="flex min-h-10 items-center gap-2 font-semibold" onClick={() => { signOut(); onSignedOut(); onNotice('You have been signed out.'); }}><Icon name="logout" size={17} />Sign out</button></div>
-    <div className="grid gap-5 md:grid-cols-[200px_1fr]">
-      <nav className="dash-nav flex flex-wrap content-start gap-1 md:flex-col" aria-label="Dashboard navigation">{tabs.map((t) => <button onClick={() => t === 'Book a ride' ? onBook() : setTab(t)} key={t} aria-current={tab === t ? 'page' : undefined} className={`min-h-11 rounded-lg px-3 text-left text-sm ${tab === t ? 'bg-[#d8e1ec] font-semibold' : 'hover:bg-[#e7ecf2]'}`}>{t}</button>)}</nav>
-      <div className="min-w-0 rounded-xl border border-[#d3dae4] bg-white p-5"><h3 className="mb-5 text-xl font-semibold">{tab}</h3><div className="step-panel" key={tab}>{view()}</div></div>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-grey p-3 text-sm"><span className="flex flex-wrap items-center gap-2">Signed in as <b>{user.name}</b> · {user.email}{customer && <StatusPill status={VERIFICATION_LABEL[user.verificationStatus || 'not_started']} />}</span>
+      <span className="flex items-center gap-4"><button className="relative flex min-h-10 items-center gap-2 font-semibold" onClick={() => setTab('Notifications')} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}><Icon name="mail" size={18} />{unread > 0 && <span className="absolute -right-2 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange px-1 text-[11px] font-bold text-navy">{unread}</span>}</button><button className="flex min-h-10 items-center gap-2 font-semibold" onClick={() => { signOut(); onSignedOut(); onNotice('You have been signed out.'); }}><Icon name="logout" size={17} />Sign out</button></span></div>
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-[210px_minmax(0,1fr)]">
+      <nav className="dash-nav flex flex-wrap content-start gap-1 md:flex-col" aria-label="Dashboard navigation">{tabs.map((t) => <button onClick={() => t === 'Book a ride' ? onBook() : setTab(t)} key={t} aria-current={tab === t ? 'page' : undefined} className={`flex min-h-11 items-center justify-between gap-2 rounded-lg px-3 text-left text-sm ${tab === t ? 'bg-navy font-semibold text-white' : 'hover:bg-grey'}`}>{t}{t === 'Notifications' && unread > 0 && <span className="rounded-full bg-orange px-2 text-[11px] font-bold text-navy">{unread}</span>}{t === 'Verification' && user.verificationStatus !== 'verified' && <span className="h-2 w-2 rounded-full bg-orange" />}</button>)}</nav>
+      <div className="min-w-0 rounded-xl border border-[#e3e8ef] bg-white p-5"><h3 className="mb-5 font-display text-xl font-extrabold">{tab}</h3><div className="step-panel" key={tab}>{view()}</div></div>
     </div>
   </div>;
 }

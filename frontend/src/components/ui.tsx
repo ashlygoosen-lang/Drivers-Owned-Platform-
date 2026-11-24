@@ -72,10 +72,11 @@ export function Spinner({ className = '' }: { className?: string }) {
 }
 
 export function StatusPill({ status }: { status: string }) {
-  const tone = /complete|approved|resolved|active|verified|passed|closed|issued/i.test(status) ? 'bg-[#d4deea] text-forest'
-    : /cancel|reject|declin|suspend/i.test(status) ? 'bg-red-50 text-red-800'
-    : 'bg-[#dee5ef] text-[#e66000]';
-  return <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-medium capitalize ${tone}`}>{status.replace(/_/g, ' ')}</span>;
+  const tone = /complete|approved|resolved|active|verified|passed|closed|issued|received|online/i.test(status) ? 'bg-[#e8f5ee] text-[#17744a]'
+    : /cancel|reject|declin|suspend|expired|action required|attention/i.test(status) ? 'bg-[#fdecec] text-[#b42828]'
+    : /not started|not scheduled/i.test(status) ? 'bg-[#eef1f5] text-[#5b6b82]'
+    : 'bg-[#fff1e6] text-[#b34a00]';
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-semibold capitalize ${tone}`}>{status.replace(/_/g, ' ')}</span>;
 }
 
 export function MapView({ active = false }: { active?: boolean }) {

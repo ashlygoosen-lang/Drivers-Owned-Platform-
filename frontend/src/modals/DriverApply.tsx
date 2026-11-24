@@ -3,11 +3,6 @@ import { api, type Application, type User } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { button, outline, input, Field, ErrorText, Icon, Spinner } from '../components/ui';
 
-const DOCS = [
-  ['identityDocument', 'Identity document (SA ID or passport)'],
-  ['drivingLicence', 'Driving licence (with PrDP if you have one)'],
-  ['vehicleDocument', 'Vehicle registration or licence disc'],
-] as const;
 
 export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
   const { user, signIn, setUser } = useAuth();
@@ -15,7 +10,6 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<Application | null>(null);
-  const [files, setFiles] = useState<Record<string, string>>({});
   const details = useRef<Record<string, string>>({});
 
   if (user && (user.role === 'business' || user.role === 'admin')) {
@@ -38,11 +32,10 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
       setStep(1);
       return;
     }
-    for (const [k, v] of Object.entries(details.current)) form.append(k, v);
-    form.set('consent', form.get('consent') ? 'true' : 'false');
+    const body = { ...details.current, ...Object.fromEntries(form), consent: !!form.get('consent') };
     setBusy(true);
     try {
-      const res = await api<{ application: Application; token: string | null; user: User }>('/drivers/apply', { form });
+      const res = await api<{ application: Application; token: string | null; user: User }>('/drivers/apply', { body });
       if (res.token) signIn(res.token, res.user); else setUser(res.user);
       setDone(res.application);
     } catch (err) {
@@ -52,7 +45,7 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
   }
 
   return <form className="grid gap-4" onSubmit={submit}>
-    <div className="mb-1 flex gap-2">{['Your details', 'Documents & vehicle'].map((t, i) => <span key={t} className={`flex-1 border-b-2 pb-3 text-[12px] transition-colors ${step === i ? 'border-forest font-bold' : 'border-[#d5dde7]'}`}>0{i + 1} {t}</span>)}</div>
+    <div className="mb-1 flex gap-2">{['Your details', 'Your vehicle'].map((t, i) => <span key={t} className={`flex-1 border-b-2 pb-3 text-[12px] transition-colors ${step === i ? 'border-forest font-bold' : 'border-[#d5dde7]'}`}>0{i + 1} {t}</span>)}</div>
     <div className="step-panel grid gap-4" key={step}>
       {step === 0 ? <>
         <Field label="Participation type"><select name="participation" defaultValue={details.current.participation} className={input}><option>Driver-owner programme</option><option>Delivery partner</option><option>Fleet owner</option></select></Field>
@@ -65,19 +58,18 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
         </>}
         {user && <p className="rounded-lg bg-[#e3eaf2] p-3 text-sm">Applying as <b>{user.name}</b> ({user.email}).</p>}
       </> : <>
-        <p className="text-[12px] leading-5 text-[#566377]">PDF, JPG or PNG, up to 5 MB each. Documents are stored securely and only seen by the DROP onboarding team.</p>
-        {DOCS.map(([name, label]) => <Field key={name} label={label}>
-          <span className={`upload-zone relative flex min-h-14 items-center gap-3 rounded-lg border border-dashed px-4 text-sm ${files[name] ? 'border-forest bg-[#e7ecf3]' : 'border-[#bfc7d4] bg-[#f4f6f8]'}`}>
-            <Icon name={files[name] ? 'check' : 'upload'} size={18} /><span className="truncate">{files[name] || 'Choose a file'}</span>
-            <input name={name} required type="file" accept=".pdf,.jpg,.jpeg,.png" className="absolute inset-0 cursor-pointer opacity-0" onChange={(e) => setFiles((f) => ({ ...f, [name]: e.target.files?.[0]?.name || '' }))} />
-          </span>
-        </Field>)}
+        <p className="text-[13px] leading-5 text-[#5b6b82]">Tell us about the vehicle you will drive. You’ll upload your licence, PrDP, registration and insurance in the next step.</p>
         <Field label="Vehicle make, model & registration"><input name="vehicle" required minLength={3} className={input} placeholder="e.g. Toyota Corolla · CA 123-456" /></Field>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Year"><input name="vehicleYear" type="number" min={2008} max={new Date().getFullYear() + 1} required className={input} placeholder="2019" /></Field>
+          <Field label="Colour"><input name="vehicleColour" className={input} placeholder="White" /></Field>
+          <Field label="Passenger seats"><select name="seats" className={input} defaultValue="4">{[3, 4, 5, 6, 7].map((n) => <option key={n}>{n}</option>)}</select></Field>
+        </div>
         <label className="flex items-start gap-3 text-sm leading-6"><input name="consent" required type="checkbox" className="mt-1.5 h-5 w-5 accent-forest" />I confirm these documents are mine and accurate. I understand programme participation is subject to eligibility and does not automatically grant shares or equity.</label>
       </>}
     </div>
     <ErrorText>{error}</ErrorText>
-    <button className={button} disabled={busy}>{busy && <Spinner />}{step === 0 ? 'Continue to documents' : 'Submit application'}<Icon name="arrow" size={17} /></button>
+    <button className={button} disabled={busy}>{busy && <Spinner />}{step === 0 ? 'Continue' : 'Submit application'}<Icon name="arrow" size={17} /></button>
     {step === 1 && <button type="button" className={outline} onClick={() => setStep(0)}>Back</button>}
   </form>;
 }

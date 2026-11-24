@@ -1,46 +1,20 @@
 import { Router } from 'express';
-import multer from 'multer';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import { db, id, now, nextRef } from '../db.js';
-import { UPLOAD_DIR } from '../config.js';
+import { getVerification, recompute } from '../kyc.js';
 import { optionalAuth, requireRole, signToken, publicUser } from '../auth.js';
 import { createUser } from './auth.js';
 import { view, setStatus } from './bookings.js';
-import { str, email, phone, password, oneOf, wrap, bad, HttpError } from '../validate.js';
+import { str, email, phone, password, oneOf, int, wrap, bad, HttpError } from '../validate.js';
 
 const router = Router();
 
-const ALLOWED = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: UPLOAD_DIR,
-    filename: (_req, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
-  }),
-  limits: { fileSize: 5 * 1024 * 1024, files: 3 },
-  fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ALLOWED[ext] && ALLOWED[ext] === file.mimetype) return cb(null, true);
-    cb(new HttpError(400, 'Documents must be PDF, JPG or PNG files under 5 MB.'));
-  },
-});
-const docFields = upload.fields([
-  { name: 'identityDocument', maxCount: 1 },
-  { name: 'drivingLicence', maxCount: 1 },
-  { name: 'vehicleDocument', maxCount: 1 },
-]);
-
 export const PARTICIPATION = ['Driver-owner programme', 'Delivery partner', 'Fleet owner'];
 
-// Apply to join. Creates a driver account if the applicant is not signed in.
-router.post('/drivers/apply', optionalAuth, docFields, wrap(async (req, res) => {
+// Apply to join. Creates a driver account if needed and records the vehicle. Documents are uploaded
+// next, through the verification centre (/api/verification).
+router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
   const b = req.body || {};
-  const files = req.files || {};
-  for (const [field, label] of [['identityDocument', 'Identity document'], ['drivingLicence', 'Driving licence'], ['vehicleDocument', 'Vehicle documentation']]) {
-    if (!files[field]?.[0]) throw bad(`${label} is required.`);
-  }
-  if (String(b.consent) !== 'true') throw bad('Please accept the programme terms to continue.');
-
+  if (b.consent !== true && String(b.consent) !== 'true') throw bad('Please accept the programme terms to continue.');
   let user = req.user;
   let token = null;
   if (!user) {
@@ -53,16 +27,18 @@ router.post('/drivers/apply', optionalAuth, docFields, wrap(async (req, res) => 
     });
     token = signToken(user);
   } else if (user.role !== 'driver') {
-    if (user.role !== 'passenger') throw bad('Business and admin accounts cannot apply as drivers. Please use a personal account.');
-    user = db.update('users', user.id, { role: 'driver', driverStatus: 'pending' });
+    if (user.role !== 'passenger') throw bad('Business and staff accounts cannot apply as drivers. Please use a personal account.');
+    user = db.update('users', user.id, { role: 'driver', driverStatus: 'pending', online: false });
+    const v = db.find('verifications', (x) => x.userId === user.id);
+    if (v) db.update('verifications', v.id, { role: 'driver', decision: null });
     token = signToken(user);
   }
   if (db.find('applications', (a) => a.userId === user.id && ['submitted', 'under_review', 'approved'].includes(a.status))) {
     throw new HttpError(409, 'You already have an application on file. You can track it in your dashboard.');
   }
-
-  const doc = (f) => ({ file: f.filename, originalName: f.originalname.slice(0, 120), size: f.size, type: f.mimetype });
-  const vehicle = str(b.vehicle, 'Vehicle make & registration', { min: 3, max: 120 });
+  const vehicle = str(b.vehicle, 'Vehicle make, model & registration', { min: 3, max: 120 });
+  const year = b.vehicleYear ? Number(b.vehicleYear) : null;
+  if (year && (year < 2008 || year > new Date().getFullYear() + 1)) throw bad('E-hailing vehicles must be 2008 or newer.');
   const application = db.insert('applications', {
     id: id(),
     ref: nextRef('application', 'APP'),
@@ -70,11 +46,10 @@ router.post('/drivers/apply', optionalAuth, docFields, wrap(async (req, res) => 
     participation: oneOf(b.participation || PARTICIPATION[0], PARTICIPATION, 'Participation type'),
     city: str(b.city, 'City', { optional: true, max: 60 }),
     vehicle,
-    documents: {
-      identityDocument: doc(files.identityDocument[0]),
-      drivingLicence: doc(files.drivingLicence[0]),
-      vehicleDocument: doc(files.vehicleDocument[0]),
-    },
+    vehicleYear: year,
+    vehicleColour: str(b.vehicleColour, 'Vehicle colour', { optional: true, max: 30 }),
+    seats: b.seats ? int(b.seats, 'Seats', { min: 2, max: 8 }) : null,
+    documents: {},
     status: 'submitted',
     checks: { identity: 'pending', inspection: 'not scheduled', activation: 'pending review' },
     notes: '',
@@ -90,7 +65,15 @@ router.get('/drivers/application', requireRole('driver'), (req, res) => {
 });
 
 const approved = (req) => {
-  if (req.user.driverStatus !== 'approved') throw new HttpError(403, 'Your driver account is awaiting approval. You can go online once it is activated.');
+  const v = getVerification(req.user.id);
+  recompute(v);
+  if (v.status !== 'verified') {
+    const err = new HttpError(403, v.status === 'submitted' ? 'Your documents are being reviewed. You can go online once they are approved.' : 'Complete your verification to go online. Upload your documents in the Verification tab.');
+    err.code = 'verification_required';
+    throw err;
+  }
+  const fresh = db.find('users', (u) => u.id === req.user.id);
+  if (fresh.driverStatus !== 'approved') throw new HttpError(403, 'Your driver account is not active. Please contact DROP support.');
 };
 
 router.post('/drivers/online', requireRole('driver'), wrap(async (req, res) => {
@@ -100,7 +83,10 @@ router.post('/drivers/online', requireRole('driver'), wrap(async (req, res) => {
 }));
 
 router.get('/drivers/requests', requireRole('driver'), wrap(async (req, res) => {
-  if (req.user.driverStatus !== 'approved' || !req.user.online) return res.json({ requests: [], active: null });
+  const v = getVerification(req.user.id);
+  recompute(v);
+  const me = db.find('users', (u) => u.id === req.user.id);
+  if (me.driverStatus !== 'approved' || !me.online) return res.json({ requests: [], active: null });
   const active = db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status));
   const requests = db.filter('bookings', (b) => b.status === 'requested').slice(-20).reverse();
   res.json({ requests: requests.map((b) => view(b, req.user)), active: active ? view(active, req.user) : null });
