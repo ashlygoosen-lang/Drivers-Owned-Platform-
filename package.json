@@ -1,0 +1,14 @@
+{
+  "name": "drop",
+  "private": true,
+  "description": "DROP — Drivers Owned Platform. A division of VINK Group (Pty) Ltd, registration number 2018/079316/07.",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix backend install --omit=dev && npm --prefix frontend install --include=dev && npm --prefix frontend run build",
+    "start": "NODE_ENV=production node backend/src/server.js",
+    "dev:api": "npm --prefix backend run dev",
+    "dev:web": "npm --prefix frontend run dev",
+    "test": "npm --prefix backend test"
+  },
+  "engines": { "node": ">=20" }
+}
