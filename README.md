@@ -33,7 +33,7 @@ Tariffs live in `backend/src/pricing.js` and are **launch placeholders, so confi
 
 ## Demo dashboards
 
-With `DEMO_MODE=true`, the sign-in screen, the header ("Try the demo") and the footer offer one-click logins for every dashboard, with sample trips, verifications, wallet and card activity, tickets and payouts:
+Demo mode is on unless `DEMO_MODE=false` is set. The hero ("Explore the demo dashboards"), the sign-in screen, the header and the footer offer one-click logins for every dashboard, with sample trips, verifications, wallet and card activity, tickets and payouts:
 
 | Demo | What it shows |
 |---|---|

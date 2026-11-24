@@ -117,7 +117,7 @@ function Page() {
           {NAV.map(([label, id]) => <button key={id} onClick={() => go(id)} aria-current={active === id ? 'true' : undefined} className={`nav-link min-h-11 ${active === id ? 'text-forest' : 'hover:text-[#4d5b71]'}`}>{label}</button>)}
         </nav>
         <div className="flex items-center gap-4">
-          {demoOn && !user && <button onClick={() => setModal({ kind: 'demo' })} className="hidden min-h-9 items-center rounded-full bg-orange/10 px-3 text-[13px] font-semibold text-orange-dark hover:bg-orange/20 lg:flex">Try the demo</button>}
+          {demoOn && !user && <button onClick={() => setModal({ kind: 'demo' })} className="hidden min-h-9 items-center rounded-full bg-orange/10 px-3 text-[13px] font-semibold text-orange-dark hover:bg-orange/20 md:flex">Try the demo</button>}
           <button onClick={account} className="hidden min-h-11 items-center gap-2 text-sm font-semibold sm:flex">{user ? <><span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange text-[12px] font-bold text-navy">{user.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}</span>My DROP</> : 'Sign in ↗'}</button>
           <button className={`${button} max-sm:!hidden`} onClick={() => book()}>Book a ride <Icon name="arrow" size={16} /></button>
           <button className="menu-toggle p-3 xl:hidden" aria-label={menu ? 'Close navigation' : 'Open navigation'} aria-expanded={menu} onClick={() => setMenu(!menu)}><span className="menu-icon" data-open={menu} aria-hidden="true"><span /><span /><span /></span></button>
@@ -148,6 +148,7 @@ function Page() {
             <h1 className="font-display text-[44px] font-extrabold leading-[1.06] tracking-[-2px] sm:text-[60px] lg:text-[70px]"><span className="motion-line"><span>The future of mobility.</span></span><span className="motion-line"><span>Owned by the people</span></span><span className="motion-line"><span><em className="hero-accent not-italic">who drive it.</em></span></span></h1>
             <p className="mt-7 max-w-[500px] text-[17px] leading-[1.75] text-white/80">A new generation of e-hailing. Built around drivers, designed for passengers. Rides, deliveries and premium travel, with no passenger platform commission.</p>
             <div className="mt-9 flex flex-wrap gap-3"><button className={limeButton} onClick={() => book()}>Let’s get you moving <Icon name="arrow" size={17} /></button><button className={darkOutline} onClick={driver}>Become a driver-owner</button></div>
+            {demoOn && !user && <button onClick={() => setModal({ kind: 'demo' })} className="mt-6 flex min-h-11 items-center gap-2 text-sm font-semibold text-orange hover:text-white"><Icon name="spark" size={16} />Explore the demo dashboards <Icon name="arrow" size={16} /></button>}
             <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-[13px] font-medium text-white/70">{['Driver-led. People-first.', 'Transparent by design.', 'Upfront fares.'].map((t) => <span className="flex items-center gap-2" key={t}><Icon name="check" size={14} className="text-[#ff6b00]" />{t}</span>)}</div>
           </div>
         </div>

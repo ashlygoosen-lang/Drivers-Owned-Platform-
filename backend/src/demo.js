@@ -1,8 +1,8 @@
 /**
  * Demo accounts for every dashboard, with realistic sample data.
  *
- * DEMO_MODE=true   enable demo logins (default: on outside production, off in production)
- * DEMO_MODE=false  disable them
+ * Demo logins are ON unless DEMO_MODE=false is set.
+ * DEMO_MODE=false  disable them (do this before real customers use the site)
  *
  * Demo accounts have random, unknown passwords: the only way in is the one-click demo login, which
  * only works while demo mode is on. Turn demo mode OFF before real customers use the site: the demo
@@ -10,14 +10,13 @@
  */
 import crypto from 'node:crypto';
 import { db, id, now, nextRef } from './db.js';
-import { IS_PROD } from './config.js';
 import { hashPassword } from './auth.js';
 import { DOC_TYPES, REQUIREMENTS, storeEncrypted, encryptText } from './kyc.js';
 import { quote } from './pricing.js';
 import { post, cents, walletAccount } from './money/ledger.js';
 import { recordCardPayment, settleTrip } from './money/settlement.js';
 
-export const demoEnabled = () => (process.env.DEMO_MODE ? process.env.DEMO_MODE === 'true' : !IS_PROD);
+export const demoEnabled = () => String(process.env.DEMO_MODE || 'true').toLowerCase() !== 'false';
 export const DEMO_DOMAIN = 'demo.drop.co.za';
 
 export const DEMO_ACCOUNTS = [
