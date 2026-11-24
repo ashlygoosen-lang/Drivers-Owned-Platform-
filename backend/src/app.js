@@ -16,6 +16,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import adminRoutes from './routes/admin.js';
 import verificationRoutes from './routes/verification.js';
 import complianceRoutes from './routes/compliance.js';
+import commsRoutes from './routes/comms.js';
 import moneyRoutes, { paystackWebhook } from './routes/money.js';
 import { remoteRouter } from './money/paymentology/remote.js';
 
@@ -39,6 +40,8 @@ export function createApp() {
     },
     crossOriginEmbedderPolicy: false,
   }));
+  // Trips use the camera and microphone for in-app calls; nothing else on the site does.
+  app.use((_req, res, next) => { res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self), payment=()'); next(); });
   app.use(compression());
   app.use(cors({
     origin(origin, cb) {
@@ -59,7 +62,7 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'drop-api', time: now() }));
   app.get('/api/company', (_req, res) => res.json(COMPANY));
   app.use('/api/auth', authRoutes);
-  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, moneyRoutes, adminRoutes);
+  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, commsRoutes, moneyRoutes, adminRoutes);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Serve the built React app (single-service deploy) with SPA fallback.

@@ -1,5 +1,5 @@
 /** DROP API client. Same-origin by default; set VITE_API_URL when the API runs on another host. */
-const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
+export const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 const KEY = 'drop.token';
 
 export type Role = 'passenger' | 'driver' | 'business' | 'admin' | 'compliance' | 'support' | 'finance';
@@ -22,7 +22,7 @@ export interface Booking {
   approximate: boolean; fare: number; driverServiceFee: number; driverEarnings: number; status: BookingStatus; paymentStatus?: 'pending' | 'paid' | 'refunded' | 'refund_pending' | 'cash' | 'invoice';
   rating: number | null; feedback: string; createdAt: string; history: { status: BookingStatus; at: string }[];
   driver: { name: string; phone: string; vehicle: string; rating: number | null } | null;
-  passenger?: { name: string; phone: string } | null;
+  passenger?: { name: string; phone: string } | null; comms?: boolean;
 }
 export interface Application {
   id: string; ref: string; userId: string; participation: string; city: string; vehicle: string; status: 'submitted' | 'under_review' | 'approved' | 'rejected';
@@ -107,3 +107,7 @@ export interface Wallet {
   withdrawals: Withdrawal[]; rules: { minWithdrawal: number; withdrawalFee: number; cashDebtLimit: number }; banks: string[];
 }
 export interface FinanceOverview { balanced: boolean; pool: number; escrow: number; driverWallets: number; driversInDebt: number; fees: number; cardSettlement: number; payoutsPending: number; businessReceivable: number; cardSpendToday: number; cardTransactionsToday: number; activeCards: number; withdrawalsRequested: number; providers: { paystack: string; paymentology: string; cardsEnabled: boolean }; accounts: { account: string; balance: number }[] }
+
+export interface ChatMessage { id: string; bookingId: string; from: 'me' | 'driver' | 'passenger' | 'system'; senderName: string; kind: 'text' | 'system'; text: string; createdAt: string; readAt: string | null }
+export interface TripCall { id: string; kind: 'audio' | 'video' | 'phone'; status: string; by: 'me' | 'them'; durationSec: number; createdAt: string }
+export interface Thread { messages: ChatMessage[]; calls: TripCall[]; open: boolean; side: 'passenger' | 'driver' | null; phone: 'masked' | 'direct' | 'off'; with: { name: string; role: 'driver' | 'passenger'; online: boolean } | null }

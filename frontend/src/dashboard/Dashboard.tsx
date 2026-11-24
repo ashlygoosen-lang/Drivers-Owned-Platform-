@@ -10,6 +10,7 @@ import { StaffManager, Notifications } from './Staff';
 import { WalletPanel } from './Wallet';
 import { FinanceOverviewPanel, Payouts, CardsAdmin, Ledger } from './Finance';
 import { VERIFICATION_LABEL } from '../lib/api';
+import { TripComms } from '../components/TripComms';
 
 const TABS = {
   passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Places & payment', 'Notifications', 'Profile', 'Support'],
@@ -113,6 +114,9 @@ function DriverRequests({ notify }: { notify: Notify }) {
   const [error, setError] = useState('');
   const load = useCallback(async () => { try { setState(await api('/drivers/requests')); } catch (err) { setError((err as Error).message); } }, []);
   useEffect(() => { void load(); const t = setInterval(load, 6000); return () => clearInterval(t); }, [load]);
+  // Trips that ended recently keep their chat open for a short while (lost items).
+  const [recent, setRecent] = useState<{ bookingId: string; ref: string; status: string; with: string }[]>([]);
+  useEffect(() => { api<{ threads: { bookingId: string; ref: string; status: string; with: string }[] }>('/comms/threads').then((r) => setRecent(r.threads.filter((t) => t.status === 'completed').slice(-1))).catch(() => {}); }, [state?.active?.id]);
   if (!user) return null;
   const approved = user.driverStatus === 'approved' && user.verificationStatus === 'verified';
   const act = async (path: string, msg: string) => { try { await api(path, { body: {} }); notify(msg); setError(''); void load(); } catch (err) { setError((err as Error).message); } };
@@ -122,9 +126,10 @@ function DriverRequests({ notify }: { notify: Notify }) {
   return <div className="grid gap-4">
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#ebeff4] p-4"><p className="text-sm">{approved ? (user.online ? 'You’re online and visible for new requests.' : 'Go online to receive ride and delivery requests.') : (user.verificationStatus === 'submitted' ? 'Your documents are being reviewed. You can go online as soon as they are approved.' : 'Complete your verification (Verification tab) to go online and accept trips.')}</p><button className={user.online ? button : outline} aria-pressed={!!user.online} disabled={!approved} onClick={toggle}>{user.online ? '● Online' : '○ Go online'}</button></div>
     <ErrorText>{error}</ErrorText>
-    {a && <div className="rounded-xl border border-forest bg-[#e6ecf3] p-5"><StatusPill status={STATUS_LABEL[a.status]} /><h4 className="mt-3 font-semibold">{a.pickup} → {a.destination}</h4><p className="my-2 text-sm">{a.passenger?.name}{a.passenger?.phone && <> · <a className="underline" href={`tel:${a.passenger.phone}`}>{a.passenger.phone}</a></>}<br />{a.distanceKm} km · {money(a.fare)} fare · you keep {money(a.driverEarnings)} · {a.payment}{a.notes && <><br />Note: {a.notes}</>}{a.parcel && <><br />Parcel: {a.parcel}</>}</p>
+    {a && <div className="rounded-xl border border-forest bg-[#e6ecf3] p-5"><StatusPill status={STATUS_LABEL[a.status]} /><h4 className="mt-3 font-semibold">{a.pickup} → {a.destination}</h4><p className="my-2 text-sm">{a.passenger?.name}<br />{a.distanceKm} km · {money(a.fare)} fare · you keep {money(a.driverEarnings)} · {a.payment}{a.notes && <><br />Note: {a.notes}</>}{a.parcel && <><br />Parcel: {a.parcel}</>}</p>
       <div className="flex flex-wrap gap-3"><button className={button} onClick={() => act(`/drivers/bookings/${a.id}/advance`, a.status === 'in_progress' ? `Trip ${a.ref} complete. ${money(a.driverEarnings)} added to your earnings.` : 'Trip updated.')}>{NEXT[a.status]}</button>{a.status !== 'in_progress' && <button className={outline} onClick={() => act(`/bookings/${a.id}/cancel`, 'Trip released back to other drivers.')}>Release trip</button>}</div>
-      <div className="mt-5 h-60"><MapView active /></div></div>}
+      <div className="mt-5 grid gap-4 lg:grid-cols-2"><TripComms bookingId={a.id} compact /><div className="h-60 lg:h-auto lg:min-h-72"><MapView active /></div></div></div>}
+    {!a && recent.map((t) => <div key={t.bookingId} className="grid gap-2"><p className="text-sm font-semibold">Recent trip {t.ref} · chat with {t.with}</p><TripComms bookingId={t.bookingId} compact /></div>)}
     {user.online && !a && (!state ? <Loading /> : state.requests.length ? state.requests.map((b) => <div key={b.id} className="request-card rounded-xl bg-[#e6ecf3] p-5"><h4 className="font-semibold">{b.pickup} → {b.destination}</h4><p className="my-3 text-sm">{b.service} · {b.category} · {b.distanceKm} km · fare {money(b.fare)} · you keep {money(b.driverEarnings)}{b.scheduledFor && <><br />Scheduled: {date(b.scheduledFor)}</>}</p><button className={button} onClick={() => act(`/drivers/bookings/${b.id}/accept`, `Request ${b.ref} accepted. Head to the pickup point.`)}>Accept request</button></div>) : <Empty>No open requests right now. This list refreshes automatically.</Empty>)}
   </div>;
 }

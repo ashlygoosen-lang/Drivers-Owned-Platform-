@@ -122,8 +122,33 @@ function makeBooking(passenger, driver, { pickup, destination, category = 'Comfo
 }
 
 /** Create the demo accounts and sample data once. Safe to call on every start. */
+/**
+ * A trip in progress between the demo passenger and the demo driver, so both can try chat and calls
+ * (sign in as each in two browsers). Recreated if a visitor completes or cancels it.
+ */
+export function seedDemoTrip() {
+  if (!demoEnabled()) return;
+  const passenger = db.find('users', (u) => u.email === `passenger@${DEMO_DOMAIN}`);
+  const driver = db.find('users', (u) => u.email === `driver@${DEMO_DOMAIN}`);
+  if (!passenger || !driver) return;
+  if (db.find('bookings', (b) => b.driverId === driver.id && ['accepted', 'arriving', 'in_progress'].includes(b.status))) return;
+  const b = makeBooking(passenger, driver, { pickup: 'V&A Waterfront', destination: 'Kirstenbosch Gardens', category: 'Comfort', payment: 'Cash', daysAgo: 0, status: 'arriving' });
+  const at = (minAgo) => new Date(Date.now() - minAgo * 60_000).toISOString();
+  db.update('bookings', b.id, { demoLive: true, notes: 'Meet at the clock tower', history: [{ status: 'requested', at: at(9) }, { status: 'accepted', at: at(8) }, { status: 'arriving', at: at(7) }] });
+  db.update('users', driver.id, { online: true });
+  const msg = (who, text, minAgo) => db.insert('messages', {
+    id: id(), bookingId: b.id, senderId: who ? who.id : null, senderRole: who === driver ? 'driver' : who ? 'passenger' : 'system', senderName: who ? who.name.split(' ')[0] : 'DROP',
+    kind: who ? 'text' : 'system', text, createdAt: at(minAgo), readAt: who ? at(minAgo - 0.5) : undefined,
+  });
+  msg(null, 'Driver assigned. You can message and call each other here. Your numbers stay private.', 8);
+  msg(driver, 'Hi Lerato, Thabo here. I’m 5 minutes away in a white Corolla Quest.', 6);
+  msg(passenger, 'Great, I’m at the clock tower by the entrance.', 5);
+  msg(driver, 'Perfect, see you there.', 4);
+}
+
 export async function seedDemo() {
-  if (!demoEnabled() || db.find('users', (u) => u.email === DEMO_ACCOUNTS[0].email)) return false;
+  if (!demoEnabled()) return false;
+  if (db.find('users', (u) => u.email === DEMO_ACCOUNTS[0].email)) { seedDemoTrip(); return false; }
   const A = Object.fromEntries(DEMO_ACCOUNTS.map((a) => [a.role, a]));
 
   const passenger = await makeUser({ ...A.passenger, phone: '+27 82 123 4567' });
@@ -183,5 +208,6 @@ export async function seedDemo() {
   const notes = [[passenger.id, 'You’re verified', 'Your identity is verified. Thank you for helping keep DROP safe.'], [driver.id, 'Withdrawal paid', 'R 500.00 was sent to Capitec •••• 7890. Reference CAP-EFT-20931.'], [driver.id, 'Document expiring soon', 'Your PrDP expires in 3 weeks. Please upload a current copy to stay active.']];
   for (const [userId, title, body] of notes) db.insert('notifications', { id: id(), userId, title, body, link: title.includes('PrDP') ? 'verification' : 'wallet', read: false, createdAt: iso(1) });
   console.log(`[drop] Demo mode: created ${DEMO_ACCOUNTS.length} demo accounts with sample data.`);
+  seedDemoTrip();
   return true;
 }

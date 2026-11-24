@@ -6,6 +6,8 @@ import { str, int, oneOf, wrap, bad, HttpError } from '../validate.js';
 import { PASSENGER_VERIFICATION } from '../config.js';
 import { getVerification, recompute } from '../kyc.js';
 import { paystackEnabled } from '../money/paystack.js';
+import { phoneMode } from '../comms/phone.js';
+import { commsOpen, onTripStatus } from './comms.js';
 
 const router = Router();
 const SERVICES = Object.keys(CATEGORIES);
@@ -27,15 +29,22 @@ router.post('/fares/estimate', optionalAuth, wrap(async (req, res) => {
   res.json(quote(tripInput(req.body || {})));
 }));
 
-/** Strip driver/passenger contact details to what the other party needs. */
+/**
+ * Strip driver/passenger contact details to what the other party needs. Registered phone numbers are
+ * only shared in "direct" phone mode, and only while the two can still contact each other. With
+ * masked calling (Twilio) neither side ever sees the other's number.
+ */
 export function view(b, viewer) {
   const driver = b.driverId ? db.find('users', (u) => u.id === b.driverId) : null;
   const passenger = db.find('users', (u) => u.id === b.userId);
+  const staff = viewer && ['admin', 'support'].includes(viewer.role);
+  const share = staff || (phoneMode() === 'direct' && commsOpen(b));
   const out = { ...b };
-  out.driver = driver ? { name: driver.name, phone: driver.phone, vehicle: driver.vehicle || '', rating: driver.rating || null } : null;
-  if (viewer && (viewer.role === 'driver' || viewer.role === 'admin')) {
-    out.passenger = passenger ? { name: b.passengerName || passenger.name, phone: passenger.phone } : null;
+  out.driver = driver ? { name: driver.name, phone: share ? driver.phone : '', vehicle: driver.vehicle || '', rating: driver.rating || null } : null;
+  if (viewer && (viewer.role === 'driver' || viewer.role === 'admin' || viewer.role === 'support')) {
+    out.passenger = passenger ? { name: b.passengerName || passenger.name, phone: share ? passenger.phone : '' } : null;
   }
+  out.comms = commsOpen(b);
   return out;
 }
 
@@ -122,7 +131,9 @@ router.get('/bookings/:id', requireAuth, wrap(async (req, res) => {
 }));
 
 function setStatus(booking, status, extra = {}) {
-  return db.update('bookings', booking.id, { ...extra, status, history: [...booking.history, { status, at: now() }] });
+  const updated = db.update('bookings', booking.id, { ...extra, status, history: [...booking.history, { status, at: now() }] });
+  onTripStatus(updated);
+  return updated;
 }
 
 router.post('/bookings/:id/cancel', requireAuth, wrap(async (req, res) => {

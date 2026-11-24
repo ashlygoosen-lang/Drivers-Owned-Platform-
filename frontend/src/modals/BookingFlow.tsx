@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, money, STATUS_LABEL, type ApiError, type Booking, type Quote, type Service } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { AuthForm } from './AuthForm';
+import { TripComms } from '../components/TripComms';
 import { button, outline, input, Field, ErrorText, Icon, MapView, Spinner } from '../components/ui';
 
 export interface TripDraft { service: Service; pickup: string; destination: string; when: string; passengers: number }
@@ -171,9 +172,10 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
         <div className="rounded-xl bg-[#dfe6f0] p-5">
           <span className="text-[12px] font-semibold tracking-wider text-forest">{booking.ref} · {STATUS_LABEL[booking.status].toUpperCase()}</span>
           <h3 className="mb-2 mt-3 text-xl font-semibold">{booking.driver ? `${booking.driver.name} is your driver.` : booking.status === 'cancelled' ? 'This booking was cancelled.' : 'We’re matching you with a DROP driver.'}</h3>
-          <p className="text-sm leading-6 text-[#4d5b71]">{booking.driver ? <>{booking.driver.vehicle || booking.category}{booking.driver.rating ? ` · ★ ${booking.driver.rating}` : ''}{booking.driver.phone && <><br />Call your driver: <a className="underline" href={`tel:${booking.driver.phone}`}>{booking.driver.phone}</a></>}</> : booking.status === 'requested' ? <>Your request is with drivers near you. This page updates automatically.{booking.scheduledFor && <><br />Scheduled for {new Date(booking.scheduledFor).toLocaleString('en-ZA')}</>}</> : null}</p>
+          <p className="text-sm leading-6 text-[#4d5b71]">{booking.driver ? <>{booking.driver.vehicle || booking.category}{booking.driver.rating ? ` · ★ ${booking.driver.rating}` : ''}</> : booking.status === 'requested' ? <>Your request is with drivers near you. This page updates automatically.{booking.scheduledFor && <><br />Scheduled for {new Date(booking.scheduledFor).toLocaleString('en-ZA')}</>}</> : null}</p>
           {booking.status !== 'cancelled' && <ol className="mt-4 grid grid-cols-4 gap-1" aria-label="Trip progress">{(['requested', 'accepted', 'in_progress', 'completed'] as const).map((s, i) => { const order = ['requested', 'accepted', 'arriving', 'in_progress', 'completed']; const done = order.indexOf(booking.status) >= order.indexOf(s); return <li key={s} className="grid gap-1 text-[11px]"><span className={`h-1 rounded-full ${done ? 'progress-on bg-forest' : 'bg-[#c4ccd8]'}`} />{['Requested', 'Driver', 'On trip', 'Done'][i]}</li>; })}</ol>}
         </div>
+        {booking.driver && booking.comms && <TripComms bookingId={booking.id} compact />}
         <p className="text-sm leading-7">○ {booking.pickup}<br />● {booking.destination}<br /><span className="text-[#505d71]">{booking.category} · {money(booking.fare)} · {booking.payment}</span></p>
         {booking.status === 'awaiting_payment' && <button className={button} onClick={() => pay(booking)}>Complete card payment · {money(booking.fare)} <Icon name="arrow" size={17} /></button>}
         {booking.paymentStatus === 'paid' && <p className="flex items-center gap-2 text-sm text-[#17744a]"><Icon name="check" size={16} />Paid by card. The fare is held safely until your trip is complete.</p>}

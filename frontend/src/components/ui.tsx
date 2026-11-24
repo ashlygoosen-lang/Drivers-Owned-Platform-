@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export type IconName = 'arrow' | 'car' | 'box' | 'star' | 'shield' | 'pin' | 'clock' | 'check' | 'people' | 'wallet' | 'menu' | 'close' | 'phone' | 'user' | 'logout' | 'upload' | 'mail' | 'building' | 'file' | 'plus' | 'trash' | 'up' | 'spark';
+export type IconName = 'arrow' | 'car' | 'box' | 'star' | 'shield' | 'pin' | 'clock' | 'check' | 'people' | 'wallet' | 'menu' | 'close' | 'phone' | 'user' | 'logout' | 'upload' | 'mail' | 'building' | 'file' | 'plus' | 'trash' | 'up' | 'spark' | 'chat' | 'video' | 'call' | 'mic' | 'micOff' | 'camOff' | 'send' | 'hangup' | 'speaker';
 
 export function Icon({ name, size = 20, className = '' }: { name: IconName; size?: number; className?: string }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -27,6 +27,15 @@ export function Icon({ name, size = 20, className = '' }: { name: IconName; size
     trash: <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />,
     up: <path d="M12 19V5m-6 6 6-6 6 6" />,
     spark: <path d="M12 2v6m0 8v6M2 12h6m8 0h6M5 5l3 3m8 8 3 3M5 19l3-3m8-8 3-3" />,
+    chat: <path d="M4 5h16v11H9l-5 4V5Zm4 5h8m-8 3h5" />,
+    video: <><rect x="2" y="6" width="14" height="12" rx="3" /><path d="m16 10 6-3v10l-6-3" /></>,
+    call: <path d="M5 3h4l2 5-3 2a11 11 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2Z" />,
+    mic: <><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v4" /></>,
+    micOff: <><path d="M15 9V5a3 3 0 0 0-6 0v6m.8 2.2A3 3 0 0 0 15 11M5 11a7 7 0 0 0 11.5 5.4M19 11a7 7 0 0 1-.6 2.8M12 18v4M3 3l18 18" /></>,
+    camOff: <><path d="M16 16v1a1 1 0 0 1-1 1H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2m4 0h5a1 1 0 0 1 1 1v3l6-3v10M3 3l18 18" /></>,
+    send: <path d="m3 11 18-8-8 18-2-8-8-2Zm8 2 10-10" />,
+    hangup: <path d="M3 14c5-5 13-5 18 0l-2.5 3-4-1.5v-3a10 10 0 0 0-5 0v3L5.5 17 3 14Z" />,
+    speaker: <><path d="M4 9h4l5-4v14l-5-4H4V9Z" /><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /></>,
   };
   return <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }

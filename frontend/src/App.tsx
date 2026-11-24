@@ -14,6 +14,7 @@ import { Counter } from './motion/Counter';
 import { Intro } from './motion/Intro';
 import { useDropMotion, useScrollProgress, useScrollSpy } from './motion/useDropMotion';
 import { BrandPage } from './brand/BrandPage';
+import { CommsProvider } from './lib/comms';
 
 const services = [
   { name: 'Ride' as Service, tag: 'EVERYDAY, ELEVATED', description: 'Your everyday journey. A better way to get there.', icon: 'car' as IconName, image: '/images/drop-hero.webp', alt: 'Professional driver beside a premium SUV in Cape Town', features: ['Instant & scheduled rides', 'Upfront fare estimates', 'Card or cash, paid to your driver'] },
@@ -105,7 +106,17 @@ function Page() {
     : modal?.kind === 'dashboard' ? ({ admin: 'Super Admin dashboard', compliance: 'Compliance dashboard', support: 'Support desk', finance: 'Finance dashboard', passenger: 'My DROP', driver: 'Driver dashboard', business: 'Business dashboard' } as Record<string, string>)[user?.role || ''] || 'Dashboard'
     : modalTitle;
 
-  return <div>
+  // A chat toast or missed call opens the trip: drivers go to their active trip, passengers to tracking.
+  const openTrip = useCallback(async (bookingId: string) => {
+    if (user?.role === 'driver') { setModal({ kind: 'dashboard', tab: 'Ride requests' }); return; }
+    try {
+      const { booking: b } = await api<{ booking: Booking }>(`/bookings/${bookingId}`);
+      setModalTitle('');
+      setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b });
+    } catch { /* trip no longer available */ }
+  }, [user?.role]);
+
+  return <CommsProvider onOpenTrip={openTrip}><div>
     <Intro />
     <a href="#main" className="sr-only z-[90] rounded bg-forest px-4 py-2 text-white focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
     <datalist id="drop-places">{places.map((p) => <option key={p} value={p} />)}</datalist>
@@ -262,7 +273,7 @@ function Page() {
     </Modal>}
 
     {notice && <div role="status" className="toast fixed bottom-5 left-1/2 z-[60] flex w-[calc(100%-32px)] max-w-xl -translate-x-1/2 items-center gap-4 rounded-xl border border-[#ff8229] bg-[#e4eaf2] p-4 text-sm leading-6 text-forest shadow-xl"><p className="flex-1">{notice}</p><button onClick={() => setNotice('')} className="flex h-11 w-11 shrink-0 items-center justify-center" aria-label="Dismiss notification"><Icon name="close" size={18} /></button></div>}
-  </div>;
+  </div></CommsProvider>;
 }
 
 export default function App() {

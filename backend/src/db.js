@@ -24,6 +24,8 @@ const EMPTY = {
   payments: [],
   notifications: [],
   audit: [],
+  messages: [],
+  calls: [],
   counters: { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0 },
 };
 

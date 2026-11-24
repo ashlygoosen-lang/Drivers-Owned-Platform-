@@ -87,3 +87,7 @@ Everything uses transform and opacity only. Motion is lighter on phones and swit
 - Replace `hello@drop.co.za` (placeholder) with the real contact address in `frontend/src/lib/company.ts` and `CONTACT_EMAIL`.
 - Have the full terms, privacy policy and driver agreement reviewed (the site shows summaries).
 - Maps are a stylised illustration. Real routing and geocoding need a maps provider (e.g. Google Maps). Card payments need a payment gateway (e.g. Paystack, Peach). Neither is connected.
+
+## Driver ↔ passenger communication
+
+Trip chat with read receipts and quick replies, in-app voice and video calls (WebRTC), and phone calls on registered numbers, masked through Twilio or direct. Open from driver acceptance until 2 hours after the trip. See [docs/COMMUNICATION.md](docs/COMMUNICATION.md).

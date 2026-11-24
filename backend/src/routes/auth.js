@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db, id, now } from '../db.js';
 import { hashPassword, checkPassword, signToken, publicUser, requireAuth } from '../auth.js';
 import { str, email, phone, password, oneOf, wrap, bad, HttpError } from '../validate.js';
-import { demoEnabled, DEMO_ACCOUNTS, isDemoUser } from '../demo.js';
+import { demoEnabled, DEMO_ACCOUNTS, isDemoUser, seedDemoTrip } from '../demo.js';
 
 const router = Router();
 
@@ -65,6 +65,7 @@ router.post('/demo', wrap(async (req, res) => {
   if (!demoEnabled()) throw new HttpError(404, 'Demo accounts are not available.');
   const acc = DEMO_ACCOUNTS.find((a) => a.role === req.body?.role);
   if (!acc) throw bad('Choose a demo dashboard.');
+  if (['passenger', 'driver'].includes(acc.role)) seedDemoTrip(); // keep a live trip to try chat and calls
   const user = db.find('users', (u) => u.email === acc.email);
   if (!user) throw new HttpError(503, 'Demo accounts are still being prepared. Try again in a moment.');
   db.update('users', user.id, { lastLoginAt: now() });
