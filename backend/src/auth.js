@@ -24,6 +24,7 @@ function readUser(req) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = db.find('users', (u) => u.id === payload.sub);
+    if (user?.email?.endsWith('@demo.drop.co.za') && !(process.env.DEMO_MODE ? process.env.DEMO_MODE === 'true' : process.env.NODE_ENV !== 'production')) return null; // demo off: demo sessions end
     return user && !user.disabled ? user : null;
   } catch {
     return null;

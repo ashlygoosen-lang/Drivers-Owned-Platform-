@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db, id, now } from '../db.js';
 import { hashPassword, checkPassword, signToken, publicUser, requireAuth } from '../auth.js';
 import { str, email, phone, password, oneOf, wrap, bad, HttpError } from '../validate.js';
+import { demoEnabled, DEMO_ACCOUNTS, isDemoUser } from '../demo.js';
 
 const router = Router();
 
@@ -46,10 +47,26 @@ router.post('/login', wrap(async (req, res) => {
   const pw = typeof req.body.password === 'string' ? req.body.password : '';
   if (!pw) throw bad('Password is required.');
   const user = db.find('users', (u) => u.email === emailAddress);
+  if (user && isDemoUser(user)) throw new HttpError(401, 'Demo accounts open with the demo buttons, not a password.');
   if (!user || !(await checkPassword(pw, user.passwordHash))) {
     throw new HttpError(401, 'That email and password combination is not recognised.');
   }
   if (user.disabled) throw new HttpError(403, 'This account has been suspended. Please contact support.');
+  db.update('users', user.id, { lastLoginAt: now() });
+  res.json({ token: signToken(user), user: publicUser(user) });
+}));
+
+// One-click demo logins (only while DEMO_MODE is on). Demo accounts have no usable password.
+router.get('/demo', (_req, res) => {
+  res.json({ enabled: demoEnabled(), accounts: demoEnabled() ? DEMO_ACCOUNTS.map(({ role, title, name, blurb }) => ({ role, title, name, blurb })) : [] });
+});
+
+router.post('/demo', wrap(async (req, res) => {
+  if (!demoEnabled()) throw new HttpError(404, 'Demo accounts are not available.');
+  const acc = DEMO_ACCOUNTS.find((a) => a.role === req.body?.role);
+  if (!acc) throw bad('Choose a demo dashboard.');
+  const user = db.find('users', (u) => u.email === acc.email);
+  if (!user) throw new HttpError(503, 'Demo accounts are still being prepared. Try again in a moment.');
   db.update('users', user.id, { lastLoginAt: now() });
   res.json({ token: signToken(user), user: publicUser(user) });
 }));
@@ -70,6 +87,7 @@ router.patch('/me', requireAuth, wrap(async (req, res) => {
   }
   if (b.paymentPreference !== undefined) patch.paymentPreference = oneOf(b.paymentPreference, ['Card', 'Cash', 'Business account'], 'Payment preference');
   if (b.notifications !== undefined) patch.notifications = oneOf(b.notifications, ['Email', 'SMS', 'None'], 'Notification preference');
+  if (isDemoUser(req.user) && (b.newPassword || b.name !== undefined)) throw bad('Demo account names and passwords cannot be changed.');
   if (b.newPassword) {
     if (!(await checkPassword(String(b.currentPassword || ''), req.user.passwordHash))) throw bad('Your current password is incorrect.');
     patch.passwordHash = await hashPassword(password(b.newPassword));

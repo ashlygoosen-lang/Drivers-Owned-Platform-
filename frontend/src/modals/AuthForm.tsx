@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { api, type User } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { button, outline, input, Field, ErrorText, Icon, Spinner } from '../components/ui';
+import { DemoPicker } from './DemoPicker';
 
 type Mode = 'signin' | 'register';
 
-export function AuthForm({ initialMode = 'signin', onDone, onDriver, note }: {
-  initialMode?: Mode; onDone: (user: User) => void; onDriver?: () => void; note?: string;
+export function AuthForm({ initialMode = 'signin', onDone, onDriver, note, showDemo = false }: {
+  initialMode?: Mode; onDone: (user: User) => void; onDriver?: () => void; note?: string; showDemo?: boolean;
 }) {
   const { signIn } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);

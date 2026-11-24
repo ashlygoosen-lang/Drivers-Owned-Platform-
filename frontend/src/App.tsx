@@ -6,6 +6,7 @@ import { Icon, type IconName, button, outline, limeButton, darkOutline, input, B
 import { Modal } from './components/Modal';
 import { BookingFlow, WHEN_OPTIONS, type TripDraft } from './modals/BookingFlow';
 import { AuthForm } from './modals/AuthForm';
+import { DemoPicker, useDemoAccounts } from './modals/DemoPicker';
 import { DriverApply } from './modals/DriverApply';
 import { InfoPanel } from './modals/InfoPanel';
 import { Dashboard } from './dashboard/Dashboard';
@@ -24,7 +25,7 @@ const NAV = [['Services', 'services'], ['Driver Ownership', 'ownership'], ['How 
 
 type ModalState =
   | { kind: 'booking'; draft: TripDraft; existing?: Booking | null }
-  | { kind: 'auth' } | { kind: 'driver' } | { kind: 'dashboard'; tab?: string } | { kind: 'info'; topic: string } | null;
+  | { kind: 'auth' } | { kind: 'demo' } | { kind: 'driver' } | { kind: 'dashboard'; tab?: string } | { kind: 'info'; topic: string } | null;
 
 const howSteps: Record<string, [string, string][]> = {
   Passengers: [['Create your account', 'Set up your passenger profile in under a minute.'], ['Choose your ride', 'Enter your destination and see your upfront fare, with no passenger commission.'], ['Sit back. You’re on your way.', 'Follow your trip status, share it with someone you trust and enjoy the ride.']],
@@ -46,6 +47,8 @@ function Page() {
   const [how, setHow] = useState('Passengers');
   const [notice, setNotice] = useState('');
   const [places, setPlaces] = useState<string[]>([]);
+  const demoAccounts = useDemoAccounts();
+  const demoOn = !!demoAccounts?.length;
   const active = useScrollSpy(NAV.map(([, id]) => id));
   const { progress, scrolled } = useScrollProgress();
   useDropMotion();
@@ -91,11 +94,13 @@ function Page() {
     if (l === 'Corporate Mobility') return info('Business solutions');
     if (l === 'My account') return account();
     if (l === 'Brand identity') { window.location.href = '/brand'; return; }
+    if (l === 'Demo dashboards') { setModal({ kind: 'demo' }); return; }
     info(l);
   };
 
   const title = modal?.kind === 'booking' ? modalTitle || `${modal.draft.service} · Let’s get you moving`
     : modal?.kind === 'auth' ? 'Welcome to DROP.'
+    : modal?.kind === 'demo' ? 'Explore the DROP dashboards'
     : modal?.kind === 'driver' ? 'Your next chapter starts here.'
     : modal?.kind === 'dashboard' ? ({ admin: 'Super Admin dashboard', compliance: 'Compliance dashboard', support: 'Support desk', finance: 'Finance dashboard', passenger: 'My DROP', driver: 'Driver dashboard', business: 'Business dashboard' } as Record<string, string>)[user?.role || ''] || 'Dashboard'
     : modalTitle;
@@ -112,6 +117,7 @@ function Page() {
           {NAV.map(([label, id]) => <button key={id} onClick={() => go(id)} aria-current={active === id ? 'true' : undefined} className={`nav-link min-h-11 ${active === id ? 'text-forest' : 'hover:text-[#4d5b71]'}`}>{label}</button>)}
         </nav>
         <div className="flex items-center gap-4">
+          {demoOn && !user && <button onClick={() => setModal({ kind: 'demo' })} className="hidden min-h-9 items-center rounded-full bg-orange/10 px-3 text-[13px] font-semibold text-orange-dark hover:bg-orange/20 lg:flex">Try the demo</button>}
           <button onClick={account} className="hidden min-h-11 items-center gap-2 text-sm font-semibold sm:flex">{user ? <><span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange text-[12px] font-bold text-navy">{user.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}</span>My DROP</> : 'Sign in ↗'}</button>
           <button className={`${button} max-sm:!hidden`} onClick={() => book()}>Book a ride <Icon name="arrow" size={16} /></button>
           <button className="menu-toggle p-3 xl:hidden" aria-label={menu ? 'Close navigation' : 'Open navigation'} aria-expanded={menu} onClick={() => setMenu(!menu)}><span className="menu-icon" data-open={menu} aria-hidden="true"><span /><span /><span /></span></button>
@@ -125,6 +131,7 @@ function Page() {
           <button className="mobile-item min-h-12 text-left text-lg" onClick={() => go('apps')}>Download the app</button>
           <button className={`${button} mobile-item mt-4`} onClick={account}>{user ? 'My DROP dashboard' : 'Sign in or create account'}</button>
           <button className={`${outline} mobile-item mt-2`} onClick={driver}>Become a driver-owner</button>
+          {demoOn && !user && <button className="mobile-item mt-2 min-h-12 text-left text-sm font-semibold text-orange-dark" onClick={() => { setMenu(false); setModal({ kind: 'demo' }); }}>Try the demo dashboards →</button>}
         </div>
       </nav>}
     </header>
@@ -233,7 +240,7 @@ function Page() {
         ['Company', 'About DROP', 'VINK Group', 'Our vision', 'Careers', 'Brand identity'],
         ['Services', 'Ride', 'Delivery', 'Premium Drive', 'Corporate Mobility'],
         ['Driver community', 'Become a driver', 'Driver ownership', 'Delivery partner', 'Fleet registration'],
-        ['Support', 'Help centre', 'Safety centre', 'Contact us', 'Report an issue', 'My account'],
+        ['Support', 'Help centre', 'Safety centre', 'Contact us', 'Report an issue', 'My account', ...(demoOn ? ['Demo dashboards'] : [])],
         ['Legal', 'Terms and conditions', 'Privacy policy', 'Driver agreement', 'Passenger terms', 'Fee structure'],
       ].map(([heading, ...links]) => <div key={heading}><h3 className="mb-4 text-sm font-semibold">{heading}</h3>{links.map((l) => <button className="footer-link block min-h-9 text-left text-[13px] text-[#bcc5d3] hover:text-white" key={l} onClick={() => footerAction(l)}>{l}{l === 'VINK Group' && ' ↗'}</button>)}</div>)}</div>
       <div className="mt-12 grid gap-3 border-t border-white/15 pt-6 text-[12px] leading-5 text-[#ff8229] md:flex md:items-center md:justify-between">
@@ -246,9 +253,10 @@ function Page() {
 
     {modal && <Modal key={modal.kind} title={title} wide={modal.kind === 'booking' || modal.kind === 'dashboard'} onClose={close} eyebrow={modal.kind === 'dashboard' ? 'MY DROP' : undefined}>
       {modal.kind === 'booking' && <BookingFlow draft={modal.draft} existing={modal.existing} onTitle={setModalTitle} onNotice={setNotice} onClose={close} onVerify={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
-      {modal.kind === 'auth' && <AuthForm onDone={(u) => setModal({ kind: 'dashboard', tab: ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
+      {modal.kind === 'demo' && <DemoPicker onDone={() => setModal({ kind: 'dashboard' })} />}
+      {modal.kind === 'auth' && <AuthForm showDemo onDone={(u) => setModal({ kind: 'dashboard', tab: ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
       {modal.kind === 'driver' && <DriverApply onDashboard={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
-      {modal.kind === 'dashboard' && (user ? <Dashboard key={modal.tab || 'Overview'} initialTab={modal.tab} onBook={() => book()} onTrack={(b) => { setModalTitle(''); setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b }); }} onOwnership={() => info('Driver ownership')} onNotice={setNotice} onSignedOut={close} /> : <AuthForm onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />)}
+      {modal.kind === 'dashboard' && (user ? <Dashboard key={`${user.id}:${modal.tab || 'Overview'}`} initialTab={modal.tab} onBook={() => book()} onTrack={(b) => { setModalTitle(''); setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b }); }} onOwnership={() => info('Driver ownership')} onNotice={setNotice} onSignedOut={close} /> : <AuthForm showDemo onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />)}
       {modal.kind === 'info' && <InfoPanel topic={modal.topic} onBook={() => book()} onDriver={driver} onApps={() => go('apps')} onNotice={setNotice} onClose={close} onOpen={info} />}
     </Modal>}
 

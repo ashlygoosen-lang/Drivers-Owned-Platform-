@@ -11,7 +11,7 @@ export interface User {
   id: string; name: string; email: string; phone: string; role: Role; company?: string;
   driverStatus?: 'pending' | 'approved' | 'suspended'; online?: boolean; vehicle?: string; rating?: number | null;
   savedPlaces?: { home: string; work: string }; paymentPreference?: string; notifications?: string;
-  employees?: Employee[]; disabled?: boolean; createdAt: string; verificationStatus?: VerificationStatus;
+  employees?: Employee[]; disabled?: boolean; createdAt: string; verificationStatus?: VerificationStatus; demo?: boolean;
 }
 export interface Employee { id: string; name: string; email: string; department: string; addedAt: string }
 export interface FareOption { category: string; description: string; seats: number; fare: number; passengerCommission: number; driverServiceFee: number; driverEarnings: number; etaMin: number }

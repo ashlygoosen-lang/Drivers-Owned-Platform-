@@ -31,6 +31,22 @@ docs/       Brand guide and apps roadmap
 Pricing: **R0 passenger platform commission.** Drivers keep the fare less one disclosed service fee (`DRIVER_SERVICE_FEE_RATE`, default 10%).
 Tariffs live in `backend/src/pricing.js` and are **launch placeholders, so confirm them before going live.**
 
+## Demo dashboards
+
+With `DEMO_MODE=true`, the sign-in screen, the header ("Try the demo") and the footer offer one-click logins for every dashboard, with sample trips, verifications, wallet and card activity, tickets and payouts:
+
+| Demo | What it shows |
+|---|---|
+| Passenger | Verified account, 7 past trips, saved places, a support ticket |
+| Driver | Wallet balance, DROP card (sandbox) with fuel/parking spend and a declined purchase, withdrawals, PrDP expiry reminder |
+| Business | Company trips on the business account, 3 team members, invoices |
+| Super Admin | Everything, including finance and staff |
+| Compliance | A driver waiting for review, a passenger with a rejected document, an expiring PrDP |
+| Support | Open, in-progress and urgent safety tickets, website enquiries |
+| Finance | Pool and wallet balances, a withdrawal waiting to be paid, card transactions, ledger |
+
+Demo accounts (`@demo.drop.co.za`) have no usable password and stop working as soon as demo mode is off. **Set `DEMO_MODE=false` before launch**: the demo staff accounts can see real customer data.
+
 ## Run locally
 
 ```bash
