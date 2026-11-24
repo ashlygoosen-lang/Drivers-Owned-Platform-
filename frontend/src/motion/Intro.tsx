@@ -17,11 +17,12 @@ export function Intro() {
     return () => clearTimeout(t);
   }, [show]);
   if (!show) return null;
-  return <div className="intro fixed inset-0 z-[80] flex items-center justify-center bg-wine text-white" aria-hidden="true">
+  return <div className="intro fixed inset-0 z-[80] flex items-center justify-center bg-navy text-white" aria-hidden="true">
     <div className="text-center">
-      <div className="intro-word overflow-hidden font-display text-[68px] font-normal leading-none tracking-[-2px] sm:text-[96px]"><span className="inline-block">DROP</span></div>
-      <div className="intro-line mx-auto mt-5 h-px w-40 bg-lime" />
-      <p className="intro-tag mt-4 text-[11px] font-semibold tracking-[3px] text-lime">DRIVERS OWNED PLATFORM</p>
+      <img src="/brand/drop-symbol-dark.svg" alt="" className="intro-tag mx-auto h-24 w-24" />
+      <div className="intro-word mt-4 overflow-hidden"><img src="/brand/drop-wordmark-dark.svg" alt="DROP" className="inline-block h-20 sm:h-24" /></div>
+      <div className="intro-line mx-auto mt-5 h-[3px] w-40 rounded bg-orange" />
+      <p className="intro-tag mt-4 text-[12px] font-bold uppercase tracking-[3px] text-orange">Ride Smart. Go Further.</p>
     </div>
   </div>;
 }

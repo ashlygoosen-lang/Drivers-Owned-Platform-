@@ -31,32 +31,36 @@ export function Icon({ name, size = 20, className = '' }: { name: IconName; size
   return <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-export const button = 'motion-button inline-flex min-h-11 items-center justify-center gap-3 rounded-full bg-forest px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_22px_#7a0d1733] hover:bg-crimson disabled:cursor-not-allowed disabled:opacity-60';
-export const outline = 'motion-button inline-flex min-h-11 items-center justify-center gap-3 rounded-full border border-[#d5d2cd] px-6 py-3 text-sm font-semibold hover:bg-[#f1eee9] disabled:opacity-60';
-export const limeButton = 'motion-button gold-button inline-flex min-h-12 items-center justify-center gap-4 rounded-full px-7 text-sm font-semibold text-[#2a0709]';
-export const darkOutline = 'motion-button inline-flex min-h-12 items-center justify-center gap-3 rounded-full border border-white/25 px-7 text-sm font-semibold text-white hover:bg-white/10';
-export const input = 'min-h-12 w-full rounded-xl border border-[#e1ded9] bg-[#f8f7f4] px-4 text-sm outline-none focus:border-forest';
+export const button = 'motion-button inline-flex min-h-11 items-center justify-center gap-3 rounded-xl bg-navy px-6 py-3 text-sm font-semibold text-white shadow-[0_6px_18px_#071b3a26] hover:bg-navy-2 disabled:cursor-not-allowed disabled:opacity-60';
+export const outline = 'motion-button inline-flex min-h-11 items-center justify-center gap-3 rounded-xl border border-[#cbd0d7] px-6 py-3 text-sm font-semibold hover:bg-[#e9ecf1] disabled:opacity-60';
+export const limeButton = 'motion-button gold-button inline-flex min-h-12 items-center justify-center gap-3 rounded-xl px-7 text-sm font-bold text-navy';
+export const darkOutline = 'motion-button inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-white/25 px-7 text-sm font-semibold text-white hover:bg-white/10';
+export const input = 'min-h-12 w-full rounded-xl border border-[#d9dce1] bg-[#f4f6f8] px-4 text-sm outline-none focus:border-forest';
 
 export function BrandImage({ src, alt, className = '', priority = false }: { src: string; alt: string; className?: string; priority?: boolean }) {
   const [failed, setFailed] = useState(false);
   return failed
-    ? <div role="img" aria-label={alt} className={`${className} flex items-center justify-center bg-[#e8e1d6] text-forest`}><span className="grid justify-items-center gap-3"><Icon name="car" size={40} /><span className="text-sm">DROP · Image unavailable</span></span></div>
+    ? <div role="img" aria-label={alt} className={`${className} flex items-center justify-center bg-[#d6dee8] text-forest`}><span className="grid justify-items-center gap-3"><Icon name="car" size={40} /><span className="text-sm">DROP · Image unavailable</span></span></div>
     : <img src={src} alt={alt} width={1536} height={864} decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : 'auto'} onError={() => setFailed(true)} className={className} />;
 }
 
-export function Logo({ light = false, compact = false }: { light?: boolean; compact?: boolean }) {
-  return <span className={`flex shrink-0 items-center gap-3 whitespace-nowrap ${light ? 'text-white' : 'text-forest'}`}>
-    <span className="logo-mark font-display text-[34px] font-semibold leading-none tracking-[-1px]">DR<span className="relative inline-block">O<span className="logo-drop absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold" /></span>P</span>
-    {!compact && <span className={`hidden border-l pl-3 text-[10px] font-semibold leading-[1.6] tracking-[2px] min-[420px]:block ${light ? 'border-white/20 text-[#e3bd4f]' : 'border-forest/20 text-gold-deep'}`}>DRIVERS OWNED<br />PLATFORM</span>}
-  </span>;
+/** Official DROP logos (vector files in /public/brand). */
+export function Logo({ light = false, compact = false, tagline = false, className = '' }: { light?: boolean; compact?: boolean; tagline?: boolean; className?: string }) {
+  const theme = light ? 'dark' : 'light';
+  const file = compact ? `drop-wordmark-${theme}` : tagline ? `drop-logo-horizontal-tagline-${theme}` : `drop-logo-horizontal-${theme}`;
+  return <img src={`/brand/${file}.svg`} alt="DROP" width={compact ? 120 : 160} height={compact ? 40 : 48} className={`block h-10 w-auto ${className}`} decoding="async" />;
+}
+
+export function BrandSymbol({ className = '', theme = 'light' }: { className?: string; theme?: 'light' | 'dark' | 'mono-navy' | 'mono-white' }) {
+  return <img src={`/brand/drop-symbol-${theme}.svg`} alt="" aria-hidden="true" className={className} />;
 }
 
 export function Label({ children, light = false }: { children: React.ReactNode; light?: boolean }) {
-  return <div className={`mb-4 flex items-center gap-3 text-[12px] font-semibold tracking-[.4px] ${light ? 'text-[#e3bd4f]' : 'text-gold-deep'}`}><span className="h-px w-7 bg-current" />{children}</div>;
+  return <div className={`mb-4 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[1.6px] ${light ? 'text-orange' : 'text-orange-dark'}`}><span className="h-2 w-2 rotate-45 rounded-[2px] bg-orange" />{children}</div>;
 }
 
 export function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return <label className="grid gap-2 text-sm">{label}{children}{hint && <span className="text-[12px] text-[#72625f]">{hint}</span>}</label>;
+  return <label className="grid gap-2 text-sm">{label}{children}{hint && <span className="text-[12px] text-[#5a6677]">{hint}</span>}</label>;
 }
 
 export function ErrorText({ children }: { children?: string }) {
@@ -68,29 +72,29 @@ export function Spinner({ className = '' }: { className?: string }) {
 }
 
 export function StatusPill({ status }: { status: string }) {
-  const tone = /complete|approved|resolved|active|verified|passed|closed|issued/i.test(status) ? 'bg-[#ede3d1] text-forest'
+  const tone = /complete|approved|resolved|active|verified|passed|closed|issued/i.test(status) ? 'bg-[#d4deea] text-forest'
     : /cancel|reject|declin|suspend/i.test(status) ? 'bg-red-50 text-red-800'
-    : 'bg-[#f4efd9] text-[#6b5a1d]';
+    : 'bg-[#dee5ef] text-[#e66000]';
   return <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-medium capitalize ${tone}`}>{status.replace(/_/g, ' ')}</span>;
 }
 
 export function MapView({ active = false }: { active?: boolean }) {
   const [zoom, setZoom] = useState(1);
-  return <div className="relative h-full min-h-72 overflow-hidden rounded-xl bg-[#f1ece6]">
+  return <div className="relative h-full min-h-72 overflow-hidden rounded-xl bg-[#e6ebf1]">
     <svg className="absolute h-full w-full" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Stylised Cape Town trip map">
       <g className="motion-map" style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
-        <path d="M0 0h170l-45 70-40 55L0 150Z" fill="#dfd8cd" /><path d="m440 260 160-70v210H400Z" fill="#e6ddcd" />
+        <path d="M0 0h170l-45 70-40 55L0 150Z" fill="#ced4de" /><path d="m440 260 160-70v210H400Z" fill="#cdd8e6" />
         {Array.from({ length: 13 }, (_, i) => <path key={`h${i}`} d={`M-50 ${i * 40} 650 ${i * 40 - 70}`} stroke="#fff" strokeWidth="10" />)}
         {Array.from({ length: 15 }, (_, i) => <path key={i} d={`m${i * 52} -50 -100 550`} stroke="#fff" strokeWidth="8" />)}
-        <path d="M-20 270 170 220 290 250 440 120 630 95" fill="none" stroke="#dbd4c9" strokeWidth="19" /><path d="M-20 270 170 220 290 250 440 120 630 95" fill="none" stroke="white" strokeWidth="12" />
-        <path className="motion-route" pathLength="1" d="m200 282 25-108 116-14 32-90" fill="none" stroke="#650c15" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="200" cy="282" r="10" fill="#fff" stroke="#650c15" strokeWidth="5" /><circle cx="373" cy="70" r="10" fill="#650c15" stroke="white" strokeWidth="4" />
-        <g fill="#756866" fontSize="11" fontFamily="sans-serif"><text x="85" y="110">GREEN POINT</text><text x="290" y="310">CAPE TOWN</text><text x="395" y="60">V&amp;A WATERFRONT</text><text x="430" y="345">DISTRICT SIX</text><text x="60" y="355">GARDENS</text></g>
-        <g className="map-car" style={{ transform: `translate(${active ? 257 : 220}px, ${active ? 170 : 210}px) rotate(-12deg)` }}><rect x="-11" y="-17" width="22" height="34" rx="6" fill="#7a0d17" stroke="white" strokeWidth="3" /><path d="M-6-8H6M-6 8H6" stroke="#c4a464" strokeWidth="5" /></g>
+        <path d="M-20 270 170 220 290 250 440 120 630 95" fill="none" stroke="#c9d0db" strokeWidth="19" /><path d="M-20 270 170 220 290 250 440 120 630 95" fill="none" stroke="white" strokeWidth="12" />
+        <path className="motion-route" pathLength="1" d="m200 282 25-108 116-14 32-90" fill="none" stroke="#0c2e65" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="200" cy="282" r="10" fill="#fff" stroke="#0c2e65" strokeWidth="5" /><circle cx="373" cy="70" r="10" fill="#0c2e65" stroke="white" strokeWidth="4" />
+        <g fill="#616b7a" fontSize="11" fontFamily="sans-serif"><text x="85" y="110">GREEN POINT</text><text x="290" y="310">CAPE TOWN</text><text x="395" y="60">V&amp;A WATERFRONT</text><text x="430" y="345">DISTRICT SIX</text><text x="60" y="355">GARDENS</text></g>
+        <g className="map-car" style={{ transform: `translate(${active ? 257 : 220}px, ${active ? 170 : 210}px) rotate(-12deg)` }}><rect x="-11" y="-17" width="22" height="34" rx="6" fill="#071b3a" stroke="white" strokeWidth="3" /><path d="M-6-8H6M-6 8H6" stroke="#ff8229" strokeWidth="5" /></g>
       </g>
     </svg>
     <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-2 text-[12px] font-medium shadow-sm"><span className="live-dot mr-2 inline-block h-1.5 w-1.5 rounded-full bg-green-700" />Trip view</span>
     <div className="absolute bottom-4 right-4 flex flex-col rounded-lg bg-white shadow"><button aria-label="Zoom in" className="h-11 w-11 border-b border-gray-100 text-xl" onClick={() => setZoom(Math.min(zoom + .2, 1.8))}>+</button><button aria-label="Zoom out" className="h-11 w-11 text-xl" onClick={() => setZoom(Math.max(zoom - .2, 1))}>−</button></div>
-    <span className="absolute bottom-3 left-4 text-[12px] text-[#635351]">Stylised map · Cape Town</span>
+    <span className="absolute bottom-3 left-4 text-[12px] text-[#4c5768]">Stylised map · Cape Town</span>
   </div>;
 }

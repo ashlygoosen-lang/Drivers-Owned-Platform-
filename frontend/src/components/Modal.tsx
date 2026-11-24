@@ -13,7 +13,7 @@ export function closeWithMotion(done: () => void) {
     .finished.then(done, done);
 }
 
-export function Modal({ title, eyebrow = 'DROP · Drivers Owned Platform', wide = false, onClose, children }: {
+export function Modal({ title, eyebrow = 'DROP · Ride Smart. Go Further.', wide = false, onClose, children }: {
   title: string; eyebrow?: string; wide?: boolean; onClose: () => void; children: React.ReactNode;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -38,9 +38,9 @@ export function Modal({ title, eyebrow = 'DROP · Drivers Owned Platform', wide 
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', onKey); previous?.focus?.(); };
   }, []);
 
-  return <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-[#1f0609]/65 p-3 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-    <section role="dialog" aria-modal="true" aria-labelledby="dialog-title" className={`relative max-h-[92dvh] w-full overflow-y-auto rounded-2xl bg-[#fcfaf6] p-6 shadow-2xl sm:p-8 ${wide ? 'max-w-6xl' : 'max-w-xl'}`}>
-      <button ref={closeRef} onClick={close} aria-label="Close dialog" className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-[#f2ede5] hover:rotate-90 hover:bg-[#e7decd]"><Icon name="close" /></button>
+  return <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-[#040f21]/65 p-3 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="dialog-title" className={`relative max-h-[92dvh] w-full overflow-y-auto rounded-2xl bg-[#ffffff] p-6 shadow-2xl sm:p-8 ${wide ? 'max-w-6xl' : 'max-w-xl'}`}>
+      <button ref={closeRef} onClick={close} aria-label="Close dialog" className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-[#e5ebf2] hover:rotate-90 hover:bg-[#cdd8e7]"><Icon name="close" /></button>
       <div className="mb-6 pr-12"><Label>{eyebrow}</Label><h2 id="dialog-title" className="font-display text-2xl font-semibold tracking-tight">{title}</h2></div>
       <div className="dialog-body">{children}</div>
     </section>

@@ -23,9 +23,9 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
   }
 
   if (done) return <div className="grid gap-5">
-    <div className="rounded-xl bg-[#f1eade] p-6"><Icon name="check" size={32} /><h3 className="mt-4 text-xl font-semibold">Application {done.ref} received</h3>
+    <div className="rounded-xl bg-[#dfe6f0] p-6"><Icon name="check" size={32} /><h3 className="mt-4 text-xl font-semibold">Application {done.ref} received</h3>
       <p className="mt-3 text-sm leading-7">Documents: received securely<br />Identity verification: {done.checks.identity}<br />Vehicle inspection: {done.checks.inspection}<br />Account activation: {done.checks.activation}</p></div>
-    <p className="text-sm leading-6 text-[#705c59]">Our onboarding team will review your documents and contact you about your vehicle inspection. Track progress any time from your driver dashboard.</p>
+    <p className="text-sm leading-6 text-[#546175]">Our onboarding team will review your documents and contact you about your vehicle inspection. Track progress any time from your driver dashboard.</p>
     <button className={button} onClick={onDashboard}>Open my driver dashboard <Icon name="arrow" size={17} /></button>
   </div>;
 
@@ -52,7 +52,7 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
   }
 
   return <form className="grid gap-4" onSubmit={submit}>
-    <div className="mb-1 flex gap-2">{['Your details', 'Documents & vehicle'].map((t, i) => <span key={t} className={`flex-1 border-b-2 pb-3 text-[12px] transition-colors ${step === i ? 'border-forest font-bold' : 'border-[#e7e0d5]'}`}>0{i + 1} {t}</span>)}</div>
+    <div className="mb-1 flex gap-2">{['Your details', 'Documents & vehicle'].map((t, i) => <span key={t} className={`flex-1 border-b-2 pb-3 text-[12px] transition-colors ${step === i ? 'border-forest font-bold' : 'border-[#d5dde7]'}`}>0{i + 1} {t}</span>)}</div>
     <div className="step-panel grid gap-4" key={step}>
       {step === 0 ? <>
         <Field label="Participation type"><select name="participation" defaultValue={details.current.participation} className={input}><option>Driver-owner programme</option><option>Delivery partner</option><option>Fleet owner</option></select></Field>
@@ -63,11 +63,11 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
           <Field label="Mobile number"><input name="phone" required type="tel" defaultValue={details.current.phone} autoComplete="tel" className={input} placeholder="+27 82 000 0000" /></Field>
           <Field label="Create a password" hint="You'll use this to sign in to your driver dashboard."><input name="password" required minLength={8} type="password" defaultValue={details.current.password} autoComplete="new-password" className={input} placeholder="At least 8 characters, letters and numbers" /></Field>
         </>}
-        {user && <p className="rounded-lg bg-[#f3ede2] p-3 text-sm">Applying as <b>{user.name}</b> ({user.email}).</p>}
+        {user && <p className="rounded-lg bg-[#e3eaf2] p-3 text-sm">Applying as <b>{user.name}</b> ({user.email}).</p>}
       </> : <>
-        <p className="text-[12px] leading-5 text-[#725e5b]">PDF, JPG or PNG, up to 5 MB each. Documents are stored securely and only seen by the DROP onboarding team.</p>
+        <p className="text-[12px] leading-5 text-[#566377]">PDF, JPG or PNG, up to 5 MB each. Documents are stored securely and only seen by the DROP onboarding team.</p>
         {DOCS.map(([name, label]) => <Field key={name} label={label}>
-          <span className={`upload-zone relative flex min-h-14 items-center gap-3 rounded-lg border border-dashed px-4 text-sm ${files[name] ? 'border-forest bg-[#f5efe5]' : 'border-[#d4ccbf] bg-[#f8f7f4]'}`}>
+          <span className={`upload-zone relative flex min-h-14 items-center gap-3 rounded-lg border border-dashed px-4 text-sm ${files[name] ? 'border-forest bg-[#e7ecf3]' : 'border-[#bfc7d4] bg-[#f4f6f8]'}`}>
             <Icon name={files[name] ? 'check' : 'upload'} size={18} /><span className="truncate">{files[name] || 'Choose a file'}</span>
             <input name={name} required type="file" accept=".pdf,.jpg,.jpeg,.png" className="absolute inset-0 cursor-pointer opacity-0" onChange={(e) => setFiles((f) => ({ ...f, [name]: e.target.files?.[0]?.name || '' }))} />
           </span>

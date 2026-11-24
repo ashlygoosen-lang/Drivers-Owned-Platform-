@@ -116,8 +116,8 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
   return <div className="grid gap-6 md:grid-cols-2">
     <div className="step-panel" key={step}>
       {step === 'details' && <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); void estimate(); }}>
-        <div className="flex gap-1 rounded-lg bg-[#f4f2ee] p-1">{(['Ride', 'Delivery', 'Premium Drive'] as Service[]).map((s) => <button type="button" key={s} aria-pressed={service === s} onClick={() => { setService(s); setQuote(null); }} className={`min-h-10 flex-1 rounded-md px-2 text-sm font-semibold ${service === s ? 'bg-forest text-white shadow-sm' : 'text-[#70615f]'}`}>{s}</button>)}</div>
-        <p className="text-sm leading-6 text-[#71615e]">{service === 'Premium Drive' ? 'Executive sedans and luxury SUVs with professional drivers, for airport, corporate and special-occasion travel.' : service === 'Delivery' ? 'Reliable collection and delivery across the city, with an upfront price.' : 'Set your pickup and destination to see your upfront fare.'}</p>
+        <div className="flex gap-1 rounded-lg bg-[#eef1f4] p-1">{(['Ride', 'Delivery', 'Premium Drive'] as Service[]).map((s) => <button type="button" key={s} aria-pressed={service === s} onClick={() => { setService(s); setQuote(null); }} className={`min-h-10 flex-1 rounded-md px-2 text-sm font-semibold ${service === s ? 'bg-forest text-white shadow-sm' : 'text-[#5a6575]'}`}>{s}</button>)}</div>
+        <p className="text-sm leading-6 text-[#596576]">{service === 'Premium Drive' ? 'Executive sedans and luxury SUVs with professional drivers, for airport, corporate and special-occasion travel.' : service === 'Delivery' ? 'Reliable collection and delivery across the city, with an upfront price.' : 'Set your pickup and destination to see your upfront fare.'}</p>
         <Field label="Pickup location"><input required className={input} value={pickup} onChange={(e) => setPickup(e.target.value)} list="drop-places" placeholder={service === 'Delivery' ? 'Collection address' : 'Where from?'} autoComplete="street-address" /></Field>
         <Field label="Destination"><input required className={input} value={destination} onChange={(e) => setDestination(e.target.value)} list="drop-places" placeholder={service === 'Delivery' ? 'Drop-off address' : 'Where to?'} /></Field>
         <div className="grid grid-cols-2 gap-3">
@@ -134,15 +134,15 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
 
       {step === 'options' && <div className="grid gap-4">
         {busy && !quote ? <p className="flex items-center gap-3 text-sm"><Spinner /> Calculating your fare…</p> : quote && <>
-          <div className="rounded-xl bg-[#f3eee6] p-4 text-sm leading-7"><p>○ &nbsp; {pickup}</p><p>● &nbsp; {destination}</p><p className="mt-1 text-[12px] text-[#6c5855]">{quote.distanceKm} km · about {quote.durationMin} min{quote.approximate && ' · approximate distance, confirmed by your driver'}</p></div>
-          <div className="grid gap-3" role="radiogroup" aria-label="Choose a category">{quote.options.map((o) => <button key={o.category} role="radio" aria-checked={category === o.category} onClick={() => setCategory(o.category)} className={`option-card flex items-center gap-4 rounded-xl border p-4 text-left ${category === o.category ? 'border-forest bg-[#f1eade]' : 'border-[#e4ddd2] hover:border-[#c4a464]'}`}><Icon name={service === 'Delivery' ? 'box' : 'car'} size={30} /><span className="flex-1 text-sm font-semibold">{o.category}<span className="mt-1 block text-[12px] font-normal text-[#6c5855]">{o.description}{o.seats ? ` · up to ${o.seats} seats` : ''}</span></span><b>{money(o.fare)}</b></button>)}</div>
+          <div className="rounded-xl bg-[#e6ecf3] p-4 text-sm leading-7"><p>○ &nbsp; {pickup}</p><p>● &nbsp; {destination}</p><p className="mt-1 text-[12px] text-[#505d71]">{quote.distanceKm} km · about {quote.durationMin} min{quote.approximate && ' · approximate distance, confirmed by your driver'}</p></div>
+          <div className="grid gap-3" role="radiogroup" aria-label="Choose a category">{quote.options.map((o) => <button key={o.category} role="radio" aria-checked={category === o.category} onClick={() => setCategory(o.category)} className={`option-card flex items-center gap-4 rounded-xl border p-4 text-left ${category === o.category ? 'border-forest bg-[#dfe6f0]' : 'border-[#d2dae4] hover:border-[#ff8229]'}`}><Icon name={service === 'Delivery' ? 'box' : 'car'} size={30} /><span className="flex-1 text-sm font-semibold">{o.category}<span className="mt-1 block text-[12px] font-normal text-[#505d71]">{o.description}{o.seats ? ` · up to ${o.seats} seats` : ''}</span></span><b>{money(o.fare)}</b></button>)}</div>
           {user?.role === 'business' && <Field label="Traveller name (optional)"><input className={input} value={passengerName} onChange={(e) => setPassengerName(e.target.value)} placeholder="Employee or guest name" /></Field>}
           <Field label="Note for your driver (optional)"><input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Gate code, landmark, luggage…" maxLength={300} /></Field>
           <Field label="Payment method"><select className={input} value={payment} onChange={(e) => setPayment(e.target.value)}><option value="Card">Card, paid to your driver</option><option value="Cash">Cash</option>{user?.role === 'business' && <option value="Business account">Business account (monthly invoice)</option>}</select></Field>
-          {selected && <div className="grid gap-2 rounded-xl border border-[#e4ddd2] p-4 text-sm">
+          {selected && <div className="grid gap-2 rounded-xl border border-[#d2dae4] p-4 text-sm">
             <div className="flex justify-between"><span>Fare</span><b>{money(selected.fare)}</b></div>
             <div className="flex justify-between text-forest"><span>Passenger platform commission</span><b>R 0</b></div>
-            <div className="flex justify-between text-[12px] text-[#6c5855]"><span>Your driver keeps</span><span>{money(selected.driverEarnings)} after the disclosed {Math.round(quote.serviceFeeRate * 100)}% DROP service fee</span></div>
+            <div className="flex justify-between text-[12px] text-[#505d71]"><span>Your driver keeps</span><span>{money(selected.driverEarnings)} after the disclosed {Math.round(quote.serviceFeeRate * 100)}% DROP service fee</span></div>
           </div>}
           <ErrorText>{error}</ErrorText>
           <button className={button} disabled={busy || !selected} onClick={confirm}>{busy && <Spinner />}Confirm {service === 'Delivery' ? 'delivery' : 'booking'}{selected && ` · ${money(selected.fare)}`}<Icon name="arrow" size={17} /></button>
@@ -153,31 +153,31 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose }: {
       {step === 'auth' && <AuthForm initialMode="register" note="Your fare is held while you sign in. You'll come straight back to confirm." onDone={() => setStep('options')} />}
 
       {step === 'tracking' && booking && <div className="grid gap-4">
-        <div className="rounded-xl bg-[#f1eade] p-5">
+        <div className="rounded-xl bg-[#dfe6f0] p-5">
           <span className="text-[12px] font-semibold tracking-wider text-forest">{booking.ref} · {STATUS_LABEL[booking.status].toUpperCase()}</span>
           <h3 className="mb-2 mt-3 text-xl font-semibold">{booking.driver ? `${booking.driver.name} is your driver.` : booking.status === 'cancelled' ? 'This booking was cancelled.' : 'We’re matching you with a DROP driver.'}</h3>
-          <p className="text-sm leading-6 text-[#6c5552]">{booking.driver ? <>{booking.driver.vehicle || booking.category}{booking.driver.rating ? ` · ★ ${booking.driver.rating}` : ''}{booking.driver.phone && <><br />Call your driver: <a className="underline" href={`tel:${booking.driver.phone}`}>{booking.driver.phone}</a></>}</> : booking.status === 'requested' ? <>Your request is with drivers near you. This page updates automatically.{booking.scheduledFor && <><br />Scheduled for {new Date(booking.scheduledFor).toLocaleString('en-ZA')}</>}</> : null}</p>
-          {booking.status !== 'cancelled' && <ol className="mt-4 grid grid-cols-4 gap-1" aria-label="Trip progress">{(['requested', 'accepted', 'in_progress', 'completed'] as const).map((s, i) => { const order = ['requested', 'accepted', 'arriving', 'in_progress', 'completed']; const done = order.indexOf(booking.status) >= order.indexOf(s); return <li key={s} className="grid gap-1 text-[11px]"><span className={`h-1 rounded-full ${done ? 'progress-on bg-forest' : 'bg-[#dbd2c1]'}`} />{['Requested', 'Driver', 'On trip', 'Done'][i]}</li>; })}</ol>}
+          <p className="text-sm leading-6 text-[#4d5b71]">{booking.driver ? <>{booking.driver.vehicle || booking.category}{booking.driver.rating ? ` · ★ ${booking.driver.rating}` : ''}{booking.driver.phone && <><br />Call your driver: <a className="underline" href={`tel:${booking.driver.phone}`}>{booking.driver.phone}</a></>}</> : booking.status === 'requested' ? <>Your request is with drivers near you. This page updates automatically.{booking.scheduledFor && <><br />Scheduled for {new Date(booking.scheduledFor).toLocaleString('en-ZA')}</>}</> : null}</p>
+          {booking.status !== 'cancelled' && <ol className="mt-4 grid grid-cols-4 gap-1" aria-label="Trip progress">{(['requested', 'accepted', 'in_progress', 'completed'] as const).map((s, i) => { const order = ['requested', 'accepted', 'arriving', 'in_progress', 'completed']; const done = order.indexOf(booking.status) >= order.indexOf(s); return <li key={s} className="grid gap-1 text-[11px]"><span className={`h-1 rounded-full ${done ? 'progress-on bg-forest' : 'bg-[#c4ccd8]'}`} />{['Requested', 'Driver', 'On trip', 'Done'][i]}</li>; })}</ol>}
         </div>
-        <p className="text-sm leading-7">○ {booking.pickup}<br />● {booking.destination}<br /><span className="text-[#6c5855]">{booking.category} · {money(booking.fare)} · {booking.payment}</span></p>
+        <p className="text-sm leading-7">○ {booking.pickup}<br />● {booking.destination}<br /><span className="text-[#505d71]">{booking.category} · {money(booking.fare)} · {booking.payment}</span></p>
         {booking.status === 'completed' && !booking.rating && <button className={button} onClick={() => setStep('rate')}>Rate your journey <Icon name="star" size={17} /></button>}
         {booking.status !== 'cancelled' && booking.status !== 'completed' && <div className="grid grid-cols-2 gap-3">
           <button className={outline} onClick={async () => { const text = `I'm on a DROP trip (${booking.ref}) from ${booking.pickup} to ${booking.destination}${booking.driver ? ` with ${booking.driver.name}` : ''}.`; try { if (navigator.share) await navigator.share({ title: 'My DROP trip', text }); else { await navigator.clipboard.writeText(text); onNotice('Trip details copied. Paste them to share with someone you trust.'); } } catch { /* share dismissed */ } }}>Share trip</button>
           <a className={outline} href="tel:10111">SOS · 10111</a>
         </div>}
-        {booking.status !== 'cancelled' && booking.status !== 'completed' && <p className="text-[12px] text-[#6c5855]">In an emergency call SAPS on 10111 or 112 from a mobile phone.</p>}
+        {booking.status !== 'cancelled' && booking.status !== 'completed' && <p className="text-[12px] text-[#505d71]">In an emergency call SAPS on 10111 or 112 from a mobile phone.</p>}
         {['requested', 'accepted', 'arriving'].includes(booking.status) && <button className="min-h-11 text-sm text-red-800 underline" disabled={busy} onClick={cancel}>Cancel booking</button>}
         <ErrorText>{error}</ErrorText>
       </div>}
 
       {step === 'rate' && booking && <form className="grid gap-5" onSubmit={rate}>
-        <div className="rounded-xl bg-[#f1eade] p-6"><Icon name="check" size={32} /><p className="mt-4 text-xl font-semibold">Trip complete · {money(booking.fare)}</p><p className="mt-2 text-sm">{booking.driver?.name} kept {money(booking.driverEarnings)} of your fare.</p></div>
+        <div className="rounded-xl bg-[#dfe6f0] p-6"><Icon name="check" size={32} /><p className="mt-4 text-xl font-semibold">Trip complete · {money(booking.fare)}</p><p className="mt-2 text-sm">{booking.driver?.name} kept {money(booking.driverEarnings)} of your fare.</p></div>
         <Field label="Rate your journey"><select name="rating" className={input} defaultValue="5"><option value="5">5 — Excellent</option><option value="4">4 — Good</option><option value="3">3 — Okay</option><option value="2">2 — Could be better</option><option value="1">1 — Poor</option></select></Field>
         <Field label="Your feedback"><textarea name="feedback" maxLength={600} className={`${input} py-3`} placeholder="Tell us about your experience" /></Field>
         <ErrorText>{error}</ErrorText>
         <button className={button} disabled={busy}>Submit rating</button>
       </form>}
     </div>
-    <div className="min-h-96"><MapView active={!!active} /><p className="mt-2 text-[12px] text-[#73605d]">Distances and times are estimates. Your driver confirms the route.</p></div>
+    <div className="min-h-96"><MapView active={!!active} /><p className="mt-2 text-[12px] text-[#586578]">Distances and times are estimates. Your driver confirms the route.</p></div>
   </div>;
 }

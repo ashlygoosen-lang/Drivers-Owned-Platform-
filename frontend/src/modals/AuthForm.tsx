@@ -33,14 +33,14 @@ export function AuthForm({ initialMode = 'signin', onDone, onDriver, note }: {
   }
 
   return <div className="grid gap-5">
-    {note && <p className="rounded-lg bg-[#f3ede2] p-3 text-sm leading-6 text-forest">{note}</p>}
-    <div className="flex gap-1 rounded-lg bg-[#f4f2ee] p-1" role="tablist" aria-label="Sign in or create account">
-      {(['signin', 'register'] as Mode[]).map((m) => <button key={m} role="tab" aria-selected={mode === m} type="button" onClick={() => { setMode(m); setError(''); }} className={`min-h-10 flex-1 rounded-md text-sm font-semibold ${mode === m ? 'bg-forest text-white shadow-sm' : 'text-[#70615f]'}`}>{m === 'signin' ? 'Sign in' : 'Create account'}</button>)}
+    {note && <p className="rounded-lg bg-[#e3eaf2] p-3 text-sm leading-6 text-forest">{note}</p>}
+    <div className="flex gap-1 rounded-lg bg-[#eef1f4] p-1" role="tablist" aria-label="Sign in or create account">
+      {(['signin', 'register'] as Mode[]).map((m) => <button key={m} role="tab" aria-selected={mode === m} type="button" onClick={() => { setMode(m); setError(''); }} className={`min-h-10 flex-1 rounded-md text-sm font-semibold ${mode === m ? 'bg-forest text-white shadow-sm' : 'text-[#5a6575]'}`}>{m === 'signin' ? 'Sign in' : 'Create account'}</button>)}
     </div>
     <form className="grid gap-4" onSubmit={submit} key={mode}>
       {mode === 'register' && <>
         <div className="grid grid-cols-2 gap-2">
-          {(['passenger', 'business'] as const).map((t) => <button type="button" key={t} aria-pressed={accountType === t} onClick={() => setAccountType(t)} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border text-sm ${accountType === t ? 'border-forest bg-[#f1eade] font-semibold' : 'border-[#e4ddd2]'}`}><Icon name={t === 'passenger' ? 'user' : 'building'} size={17} />{t === 'passenger' ? 'Personal' : 'Business'}</button>)}
+          {(['passenger', 'business'] as const).map((t) => <button type="button" key={t} aria-pressed={accountType === t} onClick={() => setAccountType(t)} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border text-sm ${accountType === t ? 'border-forest bg-[#dfe6f0] font-semibold' : 'border-[#d2dae4]'}`}><Icon name={t === 'passenger' ? 'user' : 'building'} size={17} />{t === 'passenger' ? 'Personal' : 'Business'}</button>)}
         </div>
         <Field label="Full name"><input name="name" required minLength={2} autoComplete="name" className={input} placeholder="Your full name" /></Field>
         {accountType === 'business' && <Field label="Company name"><input name="company" required minLength={2} autoComplete="organization" className={input} placeholder="Registered company name" /></Field>}
@@ -53,7 +53,7 @@ export function AuthForm({ initialMode = 'signin', onDone, onDriver, note }: {
       <ErrorText>{error}</ErrorText>
       <button className={button} disabled={busy}>{busy ? <Spinner /> : null}{mode === 'signin' ? 'Sign in' : 'Create my account'} <Icon name="arrow" size={17} /></button>
       {onDriver && <button type="button" className={outline} onClick={onDriver}>Apply as a driver or delivery partner</button>}
-      {mode === 'register' && <p className="text-[12px] leading-5 text-[#735f5c]">By creating an account you agree to the DROP passenger terms and privacy policy.</p>}
+      {mode === 'register' && <p className="text-[12px] leading-5 text-[#576478]">By creating an account you agree to the DROP passenger terms and privacy policy.</p>}
     </form>
   </div>;
 }

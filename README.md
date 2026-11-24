@@ -1,11 +1,16 @@
-# DROP — Drivers Owned Platform
+# DROP — Ride Smart. Go Further.
 
-E-hailing, delivery and premium travel, owned by the people who drive it.
+E-hailing, delivery and premium travel, owned by the people who drive it (Drivers Owned Platform).
+
+**Brand:** Midnight Navy `#071B3A` · Dynamic Orange `#FF6B00` · White · Light Grey `#F5F7FA` · Manrope + Inter.
+Live brand guidelines at **`/brand`**; see `docs/BRAND.md`. App plan: `docs/APPS-ROADMAP.md`.
 **DROP is a division of VINK Group (Pty) Ltd, registration number 2018/079316/07.**
 
 ```
-frontend/   React 19 + Vite + Tailwind v4 (from the Figma Make export)
+frontend/   React 19 + Vite + Tailwind v4 (from the Figma Make export); /brand guidelines page
 backend/    Node.js + Express API, JSON-file datastore, document uploads
+brand/      Logo system (SVG + PNG) and the generator script
+docs/       Brand guide and apps roadmap
 ```
 
 ## What works
