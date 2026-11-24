@@ -8,6 +8,7 @@ import { getVerification, recompute } from '../kyc.js';
 import { paystackEnabled } from '../money/paystack.js';
 import { phoneMode } from '../comms/phone.js';
 import { commsOpen, onTripStatus } from './comms.js';
+import { onTrackingStatus, tripPoints } from './tracking.js';
 
 const router = Router();
 const SERVICES = Object.keys(CATEGORIES);
@@ -106,6 +107,7 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
     history: [{ status: payment === 'Card' ? 'awaiting_payment' : 'requested', at: now() }],
     createdAt: now(),
   });
+  await tripPoints(booking); // coordinates for the live map
   res.status(201).json({ booking: view(booking, req.user) });
 }));
 
@@ -132,6 +134,7 @@ router.get('/bookings/:id', requireAuth, wrap(async (req, res) => {
 
 function setStatus(booking, status, extra = {}) {
   const updated = db.update('bookings', booking.id, { ...extra, status, history: [...booking.history, { status, at: now() }] });
+  onTrackingStatus(updated);
   onTripStatus(updated);
   return updated;
 }

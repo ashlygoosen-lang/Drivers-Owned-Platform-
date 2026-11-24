@@ -34,7 +34,7 @@ export const PLACES = [
   ['District Six', -33.933, 18.432], ['Woodstock', -33.927, 18.447], ['Observatory', -33.938, 18.471],
   ['Rondebosch', -33.96, 18.475], ['Claremont', -33.981, 18.465], ['Constantia', -34.026, 18.444],
   ['Century City', -33.893, 18.51], ['Bellville', -33.9, 18.629], ['Durbanville', -33.832, 18.647],
-  ['Table View', -33.824, 18.49], ['Hout Bay', -34.043, 18.354], ['Muizenberg', -34.108, 18.469],
+  ['Table View', -33.824, 18.49], ['Hout Bay', -34.043, 18.354], ['Kirstenbosch Gardens', -33.9875, 18.4327], ['Muizenberg', -34.108, 18.469],
   ['Mitchells Plain', -34.05, 18.618], ['Khayelitsha', -34.04, 18.678], ['Stellenbosch', -33.9321, 18.8602],
   ['Johannesburg CBD', -26.2041, 28.0473], ['Sandton City', -26.1076, 28.0567], ['Rosebank', -26.146, 28.0436],
   ['Soweto', -26.2485, 27.854], ['Midrand', -25.999, 28.126], ['OR Tambo International Airport', -26.1367, 28.2411],
@@ -52,7 +52,7 @@ export function findPlace(text) {
     || null;
 }
 
-function haversineKm(a, b) {
+export function haversineKm(a, b) {
   const R = 6371;
   const rad = (d) => (d * Math.PI) / 180;
   const dLat = rad(b.lat - a.lat);
@@ -61,7 +61,7 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-const round = (n, step = 1) => Math.round(n / step) * step;
+const round = (n, step = 1) => Number((Math.round(n / step) * step).toFixed(2));
 
 /** Returns { distanceKm, durationMin, approximate } for two free-text addresses. */
 export function route(pickup, destination) {

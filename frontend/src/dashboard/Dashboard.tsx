@@ -11,15 +11,17 @@ import { WalletPanel } from './Wallet';
 import { FinanceOverviewPanel, Payouts, CardsAdmin, Ledger } from './Finance';
 import { VERIFICATION_LABEL } from '../lib/api';
 import { TripComms } from '../components/TripComms';
+import { LiveMap, useDriverGps, GpsStatus } from '../components/LiveMap';
+import { FleetMap } from './FleetMap';
 
 const TABS = {
   passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Places & payment', 'Notifications', 'Profile', 'Support'],
   driver: ['Overview', 'Verification', 'Ride requests', 'Wallet & card', 'Trip history', 'Vehicle & application', 'Ownership', 'Notifications', 'Profile', 'Support'],
   business: ['Overview', 'Verification', 'Company bookings', 'Employees', 'Invoices', 'Notifications', 'Account', 'Support'],
   compliance: ['Overview', 'Verification queue', 'Expiring documents', 'Audit log', 'Notifications', 'Profile'],
-  support: ['Overview', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
+  support: ['Overview', 'Live map', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
   finance: ['Overview', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Bookings', 'Users', 'Notifications', 'Profile'],
-  admin: ['Overview', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications'],
+  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications'],
 } as const;
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
@@ -117,6 +119,7 @@ function DriverRequests({ notify }: { notify: Notify }) {
   // Trips that ended recently keep their chat open for a short while (lost items).
   const [recent, setRecent] = useState<{ bookingId: string; ref: string; status: string; with: string }[]>([]);
   useEffect(() => { api<{ threads: { bookingId: string; ref: string; status: string; with: string }[] }>('/comms/threads').then((r) => setRecent(r.threads.filter((t) => t.status === 'completed').slice(-1))).catch(() => {}); }, [state?.active?.id]);
+  const gps = useDriverGps(Boolean(user?.online || state?.active), Boolean(user?.demo));
   if (!user) return null;
   const approved = user.driverStatus === 'approved' && user.verificationStatus === 'verified';
   const act = async (path: string, msg: string) => { try { await api(path, { body: {} }); notify(msg); setError(''); void load(); } catch (err) { setError((err as Error).message); } };
@@ -125,10 +128,11 @@ function DriverRequests({ notify }: { notify: Notify }) {
   const NEXT: Record<string, string> = { accepted: 'I’m on my way to pickup', arriving: 'Passenger collected · start trip', in_progress: 'Complete trip' };
   return <div className="grid gap-4">
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#ebeff4] p-4"><p className="text-sm">{approved ? (user.online ? 'You’re online and visible for new requests.' : 'Go online to receive ride and delivery requests.') : (user.verificationStatus === 'submitted' ? 'Your documents are being reviewed. You can go online as soon as they are approved.' : 'Complete your verification (Verification tab) to go online and accept trips.')}</p><button className={user.online ? button : outline} aria-pressed={!!user.online} disabled={!approved} onClick={toggle}>{user.online ? '● Online' : '○ Go online'}</button></div>
+    {approved && <GpsStatus state={gps} />}
     <ErrorText>{error}</ErrorText>
     {a && <div className="rounded-xl border border-forest bg-[#e6ecf3] p-5"><StatusPill status={STATUS_LABEL[a.status]} /><h4 className="mt-3 font-semibold">{a.pickup} → {a.destination}</h4><p className="my-2 text-sm">{a.passenger?.name}<br />{a.distanceKm} km · {money(a.fare)} fare · you keep {money(a.driverEarnings)} · {a.payment}{a.notes && <><br />Note: {a.notes}</>}{a.parcel && <><br />Parcel: {a.parcel}</>}</p>
       <div className="flex flex-wrap gap-3"><button className={button} onClick={() => act(`/drivers/bookings/${a.id}/advance`, a.status === 'in_progress' ? `Trip ${a.ref} complete. ${money(a.driverEarnings)} added to your earnings.` : 'Trip updated.')}>{NEXT[a.status]}</button>{a.status !== 'in_progress' && <button className={outline} onClick={() => act(`/bookings/${a.id}/cancel`, 'Trip released back to other drivers.')}>Release trip</button>}</div>
-      <div className="mt-5 grid gap-4 lg:grid-cols-2"><TripComms bookingId={a.id} compact /><div className="h-60 lg:h-auto lg:min-h-72"><MapView active /></div></div></div>}
+      <div className="mt-5 grid gap-4 lg:grid-cols-2"><LiveMap bookingId={a.id} viewer="driver" className="h-72" /><TripComms bookingId={a.id} compact /></div></div>}
     {!a && recent.map((t) => <div key={t.bookingId} className="grid gap-2"><p className="text-sm font-semibold">Recent trip {t.ref} · chat with {t.with}</p><TripComms bookingId={t.bookingId} compact /></div>)}
     {user.online && !a && (!state ? <Loading /> : state.requests.length ? state.requests.map((b) => <div key={b.id} className="request-card rounded-xl bg-[#e6ecf3] p-5"><h4 className="font-semibold">{b.pickup} → {b.destination}</h4><p className="my-3 text-sm">{b.service} · {b.category} · {b.distanceKm} km · fare {money(b.fare)} · you keep {money(b.driverEarnings)}{b.scheduledFor && <><br />Scheduled: {date(b.scheduledFor)}</>}</p><button className={button} onClick={() => act(`/drivers/bookings/${b.id}/accept`, `Request ${b.ref} accepted. Head to the pickup point.`)}>Accept request</button></div>) : <Empty>No open requests right now. This list refreshes automatically.</Empty>)}
   </div>;
@@ -264,6 +268,7 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
       case 'Drivers': return <AdminUsers role="driver" notify={onNotice} />;
       case 'Users': return <AdminUsers notify={onNotice} readOnly={user.role !== 'admin'} />;
       case 'Bookings': return <AdminBookings />;
+      case 'Live map': return <FleetMap />;
       case 'Tickets': return <AdminTickets notify={onNotice} />;
       case 'Enquiries': return <AdminEnquiries notify={onNotice} />;
       default: return null;

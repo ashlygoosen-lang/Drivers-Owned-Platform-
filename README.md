@@ -91,3 +91,7 @@ Everything uses transform and opacity only. Motion is lighter on phones and swit
 ## Driver ↔ passenger communication
 
 Trip chat with read receipts and quick replies, in-app voice and video calls (WebRTC), and phone calls on registered numbers, masked through Twilio or direct. Open from driver acceptance until 2 hours after the trip. See [docs/COMMUNICATION.md](docs/COMMUNICATION.md).
+
+## Live vehicle tracking (Google Maps)
+
+The passenger sees the driver's car move in real time, with the road route and an arrival time based on live traffic. Drivers share GPS while online, passengers can share their pickup spot, and admin and support get a Live map of the whole fleet. See [docs/TRACKING.md](docs/TRACKING.md).

@@ -3,6 +3,7 @@ import { api, money, STATUS_LABEL, type ApiError, type Booking, type Quote, type
 import { useAuth } from '../lib/auth';
 import { AuthForm } from './AuthForm';
 import { TripComms } from '../components/TripComms';
+import { LiveMap, SharePickupLocation } from '../components/LiveMap';
 import { button, outline, input, Field, ErrorText, Icon, MapView, Spinner } from '../components/ui';
 
 export interface TripDraft { service: Service; pickup: string; destination: string; when: string; passengers: number }
@@ -198,6 +199,8 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
         <button className={button} disabled={busy}>Submit rating</button>
       </form>}
     </div>
-    <div className="min-h-96"><MapView active={!!active} /><p className="mt-2 text-[12px] text-[#586578]">Distances and times are estimates. Your driver confirms the route.</p></div>
+    {step === 'tracking' && booking
+      ? <div className="grid content-start gap-3"><LiveMap bookingId={booking.id} viewer="passenger" className="h-80 md:h-[420px]" /><SharePickupLocation bookingId={booking.id} status={booking.status} /></div>
+      : <div className="min-h-96"><MapView active={!!active} /><p className="mt-2 text-[12px] text-[#586578]">Distances and times are estimates. Your driver confirms the route.</p></div>}
   </div>;
 }
