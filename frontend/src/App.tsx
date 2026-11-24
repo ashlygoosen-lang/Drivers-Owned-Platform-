@@ -123,9 +123,9 @@ function Page() {
     <main id="main">
       <section className="motion-hero relative overflow-hidden bg-wine text-white">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_40%,#123a74_0%,#071b3a_55%,#04122a_100%)]" aria-hidden="true" />
-        <div className="hero-visual absolute inset-y-0 right-0 hidden w-[58%] lg:block"><BrandImage src="/images/drop-hero.webp" alt="Professional DROP driver and premium SUV in the warm light of Cape Town" priority className="hero-image h-full w-full object-cover object-[64%_50%]" /><div className="absolute inset-0 bg-gradient-to-r from-[#071b3a] via-[#071b3a]/30 to-transparent" /><div className="absolute inset-0 bg-gradient-to-t from-[#071b3a]/80 via-transparent to-transparent" /></div>
-        <div className="hero-lines pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="hero-orbs pointer-events-none absolute inset-0" aria-hidden="true"><span /><span /></div>
+        <div className="hero-visual absolute inset-y-0 right-0 hidden w-[60%] lg:block"><BrandImage src="/images/drop-hero.webp" alt="Professional DROP driver and premium SUV in the warm light of Cape Town" priority className="hero-image h-full w-full object-cover object-[60%_55%] [filter:saturate(1.08)_contrast(1.04)_brightness(1.04)]" /><div className="absolute inset-y-0 left-0 w-[38%] bg-[linear-gradient(90deg,#071b3a_0%,rgba(7,27,58,.6)_35%,rgba(7,27,58,0)_100%)]" /><div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#071b3a]/55 to-transparent" /></div>
+        <div className="hero-lines pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="relative mx-auto max-w-[1440px] px-6 pb-16 pt-16 lg:px-12 lg:pb-[170px] lg:pt-24">
           <div className="hero-copy max-w-[640px]">
             <div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium"><span className="flex items-center gap-2 font-bold uppercase tracking-[1.6px] text-orange"><span className="h-2 w-2 rotate-45 rounded-[2px] bg-orange" />Ride Smart. Go Further.</span><span className="hidden h-4 w-px bg-white/25 sm:block" /><span className="text-white/75">A VINK Group division</span></div>
