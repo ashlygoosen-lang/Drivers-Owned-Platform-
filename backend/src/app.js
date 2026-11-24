@@ -16,6 +16,8 @@ import dashboardRoutes from './routes/dashboard.js';
 import adminRoutes from './routes/admin.js';
 import verificationRoutes from './routes/verification.js';
 import complianceRoutes from './routes/compliance.js';
+import moneyRoutes, { paystackWebhook } from './routes/money.js';
+import { remoteRouter } from './money/paymentology/remote.js';
 
 export function createApp() {
   const app = express();
@@ -44,6 +46,8 @@ export function createApp() {
       cb(null, false);
     },
   }));
+  // Payment provider callbacks need raw bodies and must not be rate limited per IP.
+  app.use('/api', remoteRouter(), paystackWebhook());
   app.use(express.json({ limit: '100kb' }));
 
   const limiter = (max, windowMin = 15) => rateLimit({ windowMs: windowMin * 60_000, max, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Too many requests. Please wait a few minutes and try again.' } });
@@ -55,7 +59,7 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'drop-api', time: now() }));
   app.get('/api/company', (_req, res) => res.json(COMPANY));
   app.use('/api/auth', authRoutes);
-  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, adminRoutes);
+  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, moneyRoutes, adminRoutes);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Serve the built React app (single-service deploy) with SPA fallback.

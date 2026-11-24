@@ -45,6 +45,8 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [needsVerify, setNeedsVerify] = useState(false);
+  const [cardOn, setCardOn] = useState(false);
+  useEffect(() => { api<{ card: boolean }>('/payments/config').then((r) => { setCardOn(r.card); if (!r.card) setPayment((x) => (x === 'Card' ? 'Cash' : x)); }).catch(() => setPayment((x) => (x === 'Card' ? 'Cash' : x))); }, []);
 
   useEffect(() => { onTitle(bookingTitle(service, step, booking)); }, [service, step, booking, onTitle]);
 
@@ -83,6 +85,7 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
       const res = await api<{ booking: Booking }>('/bookings', {
         body: { service, category, pickup, destination, passengers, parcel, passengerName, notes, payment, scheduledFor: scheduledFrom(when, custom) },
       });
+      if (res.booking.status === 'awaiting_payment') { await pay(res.booking); return; }
       setBooking(res.booking);
       setStep('tracking');
     } catch (err) {
@@ -90,6 +93,13 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
       setNeedsVerify((err as ApiError).code === 'verification_required');
     }
     finally { setBusy(false); }
+  }
+
+  async function pay(b: Booking) {
+    try {
+      const r = await api<{ authorizationUrl: string }>(`/payments/bookings/${b.id}/checkout`, { body: {} });
+      window.location.assign(r.authorizationUrl); // Paystack secure checkout; returns to /?payment_ref=…
+    } catch (err) { setBooking(b); setStep('tracking'); setError((err as Error).message); }
   }
 
   async function cancel() {
@@ -143,7 +153,7 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
           <div className="grid gap-3" role="radiogroup" aria-label="Choose a category">{quote.options.map((o) => <button key={o.category} role="radio" aria-checked={category === o.category} onClick={() => setCategory(o.category)} className={`option-card flex items-center gap-4 rounded-xl border p-4 text-left ${category === o.category ? 'border-forest bg-[#dfe6f0]' : 'border-[#d2dae4] hover:border-[#ff8229]'}`}><Icon name={service === 'Delivery' ? 'box' : 'car'} size={30} /><span className="flex-1 text-sm font-semibold">{o.category}<span className="mt-1 block text-[12px] font-normal text-[#505d71]">{o.description}{o.seats ? ` · up to ${o.seats} seats` : ''}</span></span><b>{money(o.fare)}</b></button>)}</div>
           {user?.role === 'business' && <Field label="Traveller name (optional)"><input className={input} value={passengerName} onChange={(e) => setPassengerName(e.target.value)} placeholder="Employee or guest name" /></Field>}
           <Field label="Note for your driver (optional)"><input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Gate code, landmark, luggage…" maxLength={300} /></Field>
-          <Field label="Payment method"><select className={input} value={payment} onChange={(e) => setPayment(e.target.value)}><option value="Card">Card, paid to your driver</option><option value="Cash">Cash</option>{user?.role === 'business' && <option value="Business account">Business account (monthly invoice)</option>}</select></Field>
+          <Field label="Payment method" hint={payment === 'Card' ? 'You’ll pay securely with Paystack before we find your driver.' : undefined}><select className={input} value={payment} onChange={(e) => setPayment(e.target.value)}>{cardOn && <option value="Card">Card (pay now, secure checkout)</option>}<option value="Cash">Cash, paid to your driver</option>{user?.role === 'business' && <option value="Business account">Business account (monthly invoice)</option>}</select></Field>
           {selected && <div className="grid gap-2 rounded-xl border border-[#d2dae4] p-4 text-sm">
             <div className="flex justify-between"><span>Fare</span><b>{money(selected.fare)}</b></div>
             <div className="flex justify-between text-forest"><span>Passenger platform commission</span><b>R 0</b></div>
@@ -165,13 +175,16 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
           {booking.status !== 'cancelled' && <ol className="mt-4 grid grid-cols-4 gap-1" aria-label="Trip progress">{(['requested', 'accepted', 'in_progress', 'completed'] as const).map((s, i) => { const order = ['requested', 'accepted', 'arriving', 'in_progress', 'completed']; const done = order.indexOf(booking.status) >= order.indexOf(s); return <li key={s} className="grid gap-1 text-[11px]"><span className={`h-1 rounded-full ${done ? 'progress-on bg-forest' : 'bg-[#c4ccd8]'}`} />{['Requested', 'Driver', 'On trip', 'Done'][i]}</li>; })}</ol>}
         </div>
         <p className="text-sm leading-7">○ {booking.pickup}<br />● {booking.destination}<br /><span className="text-[#505d71]">{booking.category} · {money(booking.fare)} · {booking.payment}</span></p>
+        {booking.status === 'awaiting_payment' && <button className={button} onClick={() => pay(booking)}>Complete card payment · {money(booking.fare)} <Icon name="arrow" size={17} /></button>}
+        {booking.paymentStatus === 'paid' && <p className="flex items-center gap-2 text-sm text-[#17744a]"><Icon name="check" size={16} />Paid by card. The fare is held safely until your trip is complete.</p>}
+        {booking.paymentStatus === 'refunded' && <p className="text-sm text-[#5b6b82]">Your card payment has been refunded. It can take 5–7 working days to reach your account.</p>}
         {booking.status === 'completed' && !booking.rating && <button className={button} onClick={() => setStep('rate')}>Rate your journey <Icon name="star" size={17} /></button>}
         {booking.status !== 'cancelled' && booking.status !== 'completed' && <div className="grid grid-cols-2 gap-3">
           <button className={outline} onClick={async () => { const text = `I'm on a DROP trip (${booking.ref}) from ${booking.pickup} to ${booking.destination}${booking.driver ? ` with ${booking.driver.name}` : ''}.`; try { if (navigator.share) await navigator.share({ title: 'My DROP trip', text }); else { await navigator.clipboard.writeText(text); onNotice('Trip details copied. Paste them to share with someone you trust.'); } } catch { /* share dismissed */ } }}>Share trip</button>
           <a className={outline} href="tel:10111">SOS · 10111</a>
         </div>}
         {booking.status !== 'cancelled' && booking.status !== 'completed' && <p className="text-[12px] text-[#505d71]">In an emergency call SAPS on 10111 or 112 from a mobile phone.</p>}
-        {['requested', 'accepted', 'arriving'].includes(booking.status) && <button className="min-h-11 text-sm text-red-800 underline" disabled={busy} onClick={cancel}>Cancel booking</button>}
+        {['awaiting_payment', 'requested', 'accepted', 'arriving'].includes(booking.status) && <button className="min-h-11 text-sm text-red-800 underline" disabled={busy} onClick={cancel}>Cancel booking</button>}
         <ErrorText>{error}</ErrorText>
       </div>}
 

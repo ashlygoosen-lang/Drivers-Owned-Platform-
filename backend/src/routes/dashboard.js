@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { requireAuth } from '../auth.js';
+import { balance, walletBalance, rands } from '../money/ledger.js';
 
 const router = Router();
 const DAY = 86_400_000;
@@ -45,6 +46,7 @@ router.get('/dashboard', requireAuth, (req, res) => {
         { label: 'Gross fares', value: sum(done, 'fare'), money: true },
         { label: 'DROP service fees', value: sum(done, 'driverServiceFee'), money: true },
         { label: 'Your earnings', value: sum(done, 'driverEarnings'), money: true },
+        { label: 'Wallet balance', value: rands(walletBalance(u.id)), money: true },
         { label: 'Completed trips', value: done.length },
       ],
       chart: { title: 'Earnings · last 7 days', money: true, data: week(done, 'completedAt', 'driverEarnings') },
@@ -84,6 +86,21 @@ router.get('/dashboard', requireAuth, (req, res) => {
         { label: 'Reviewed today', value: reviews.filter((a) => a.at.startsWith(today)).length },
       ],
       chart: { title: 'Document reviews · last 7 days', data: week(reviews, 'at') },
+    });
+  }
+  if (u.role === 'finance') {
+    const since = new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString();
+    const spend = db.filter('cardEvents', (e) => e.method === 'Deduct' && e.approved);
+    return res.json({
+      stats: [
+        { label: 'Pool account (ledger)', value: rands(balance('pool')), money: true },
+        { label: 'Held for open trips', value: rands(balance('escrow')), money: true },
+        { label: 'Owed to drivers', value: rands(db.all('users').filter((x) => x.role === 'driver').reduce((s2, d) => s2 + walletBalance(d.id), 0)), money: true },
+        { label: 'DROP fees earned', value: rands(balance('fees')), money: true },
+        { label: 'Withdrawals to pay', value: db.filter('withdrawals', (w) => w.status === 'requested').length },
+        { label: 'Card spend today', value: rands(spend.filter((e) => e.createdAt >= since).reduce((s2, e) => s2 + e.amount - (e.reversed || 0), 0)), money: true },
+      ],
+      chart: { title: 'Card spend · last 7 days', money: true, data: week(spend.map((e) => ({ ...e, value: (e.amount - (e.reversed || 0)) / 100 })), 'createdAt', 'value') },
     });
   }
   if (u.role === 'support') {

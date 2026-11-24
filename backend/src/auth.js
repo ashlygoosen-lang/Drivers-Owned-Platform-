@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs';
 import { JWT_SECRET, JWT_EXPIRES_IN } from './config.js';
 import { db } from './db.js';
 
-export const ROLES = ['passenger', 'driver', 'business', 'admin', 'compliance', 'support'];
-export const STAFF_ROLES = ['admin', 'compliance', 'support'];
+export const ROLES = ['passenger', 'driver', 'business', 'admin', 'compliance', 'support', 'finance'];
+export const STAFF_ROLES = ['admin', 'compliance', 'support', 'finance'];
 
 export const hashPassword = (pw) => bcrypt.hash(pw, 11);
 export const checkPassword = (pw, hash) => bcrypt.compare(pw, hash);

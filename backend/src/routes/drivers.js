@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { db, id, now, nextRef } from '../db.js';
 import { getVerification, recompute } from '../kyc.js';
+import { settleTrip } from '../money/settlement.js';
+import { walletBalance, cents } from '../money/ledger.js';
 import { optionalAuth, requireRole, signToken, publicUser } from '../auth.js';
 import { createUser } from './auth.js';
 import { view, setStatus } from './bookings.js';
@@ -102,6 +104,8 @@ router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (r
     throw bad('Finish your current trip before accepting another.');
   }
   if (booking.userId === req.user.id) throw bad('You cannot accept your own booking.');
+  const debtLimit = cents(process.env.CASH_DEBT_LIMIT || 300);
+  if (booking.payment === 'Cash' && walletBalance(req.user.id) < -debtLimit) throw bad('Your wallet owes more than the cash limit in DROP service fees. Card and business trips will top it up, or contact support.');
   res.json({ booking: view(setStatus(booking, 'accepted', { driverId: req.user.id }), req.user) });
 }));
 
@@ -109,7 +113,9 @@ router.post('/drivers/bookings/:id/advance', requireRole('driver'), wrap(async (
   const booking = db.find('bookings', (b) => b.id === req.params.id && b.driverId === req.user.id);
   if (!booking || !NEXT[booking.status]) throw bad('This trip cannot be updated.');
   const next = NEXT[booking.status];
-  res.json({ booking: view(setStatus(booking, next, next === 'completed' ? { completedAt: now() } : {}), req.user) });
+  const updated = setStatus(booking, next, next === 'completed' ? { completedAt: now() } : {});
+  if (next === 'completed') settleTrip(updated);
+  res.json({ booking: view(db.find('bookings', (b) => b.id === updated.id), req.user) });
 }));
 
 export default router;

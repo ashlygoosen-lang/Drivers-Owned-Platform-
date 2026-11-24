@@ -17,9 +17,14 @@ const EMPTY = {
   tickets: [],
   enquiries: [],
   verifications: [],
+  ledger: [],
+  cards: [],
+  cardEvents: [],
+  withdrawals: [],
+  payments: [],
   notifications: [],
   audit: [],
-  counters: { booking: 1000, application: 100, ticket: 100, enquiry: 100 },
+  counters: { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0 },
 };
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });

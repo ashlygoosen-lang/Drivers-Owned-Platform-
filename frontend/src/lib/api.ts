@@ -2,10 +2,10 @@
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 const KEY = 'drop.token';
 
-export type Role = 'passenger' | 'driver' | 'business' | 'admin' | 'compliance' | 'support';
-export const STAFF_ROLES: Role[] = ['admin', 'compliance', 'support'];
+export type Role = 'passenger' | 'driver' | 'business' | 'admin' | 'compliance' | 'support' | 'finance';
+export const STAFF_ROLES: Role[] = ['admin', 'compliance', 'support', 'finance'];
 export type Service = 'Ride' | 'Delivery' | 'Premium Drive';
-export type BookingStatus = 'requested' | 'accepted' | 'arriving' | 'in_progress' | 'completed' | 'cancelled';
+export type BookingStatus = 'awaiting_payment' | 'requested' | 'accepted' | 'arriving' | 'in_progress' | 'completed' | 'cancelled';
 
 export interface User {
   id: string; name: string; email: string; phone: string; role: Role; company?: string;
@@ -19,7 +19,7 @@ export interface Quote { service: Service; distanceKm: number; durationMin: numb
 export interface Booking {
   id: string; ref: string; service: Service; category: string; pickup: string; destination: string; passengers: number;
   parcel: string; notes: string; passengerName: string; scheduledFor: string | null; payment: string; distanceKm: number; durationMin: number;
-  approximate: boolean; fare: number; driverServiceFee: number; driverEarnings: number; status: BookingStatus;
+  approximate: boolean; fare: number; driverServiceFee: number; driverEarnings: number; status: BookingStatus; paymentStatus?: 'pending' | 'paid' | 'refunded' | 'refund_pending' | 'cash' | 'invoice';
   rating: number | null; feedback: string; createdAt: string; history: { status: BookingStatus; at: string }[];
   driver: { name: string; phone: string; vehicle: string; rating: number | null } | null;
   passenger?: { name: string; phone: string } | null;
@@ -94,5 +94,16 @@ export async function openProtectedFile(path: string) {
 export const money = (n: number) => `R ${n.toLocaleString('en-ZA', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 export const date = (iso: string) => new Date(iso).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 export const STATUS_LABEL: Record<BookingStatus, string> = {
-  requested: 'Finding your driver', accepted: 'Driver assigned', arriving: 'Driver arriving', in_progress: 'On the way', completed: 'Completed', cancelled: 'Cancelled',
+  awaiting_payment: 'Awaiting payment', requested: 'Finding your driver', accepted: 'Driver assigned', arriving: 'Driver arriving', in_progress: 'On the way', completed: 'Completed', cancelled: 'Cancelled',
 };
+
+export interface WalletTx { id: string; type: string; memo: string; amount: number; createdAt: string; meta?: { category?: string; merchant?: string; bookingRef?: string } }
+export interface DropCard { id: string; programme: string; maskedNumber: string; validDate: string; status: 'active' | 'frozen' | 'stopped' | 'lost' | 'stolen' | 'retired'; type: string; issuedAt: string; sandbox: boolean; stopReason: number | null }
+export interface Withdrawal { id: string; ref: string; amount: number; fee: number; status: 'requested' | 'paid' | 'rejected'; bank: string; masked: string; holder: string; bankReference?: string; reason?: string; createdAt: string; paidAt?: string; driver?: string; userId?: string }
+export interface Wallet {
+  balance: number; pendingWithdrawals: number; transactions: WalletTx[]; declined: { id: string; merchant: string; amount: number; reason: string; createdAt: string }[];
+  card: DropCard | null; cardProgramme: { enabled: boolean; sandbox: boolean; name: string; limits: { perTransaction: number; daily: number; spentToday: number; atm: boolean } };
+  bankAccount: { holder: string; bank: string; branchCode: string; accountType: string; masked: string } | null;
+  withdrawals: Withdrawal[]; rules: { minWithdrawal: number; withdrawalFee: number; cashDebtLimit: number }; banks: string[];
+}
+export interface FinanceOverview { balanced: boolean; pool: number; escrow: number; driverWallets: number; driversInDebt: number; fees: number; cardSettlement: number; payoutsPending: number; businessReceivable: number; cardSpendToday: number; cardTransactionsToday: number; activeCards: number; withdrawalsRequested: number; providers: { paystack: string; paymentology: string; cardsEnabled: boolean }; accounts: { account: string; balance: number }[] }

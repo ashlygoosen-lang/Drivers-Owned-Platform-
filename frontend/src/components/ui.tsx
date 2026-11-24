@@ -76,7 +76,7 @@ export function StatusPill({ status }: { status: string }) {
     : /cancel|reject|declin|suspend|expired|action required|attention/i.test(status) ? 'bg-[#fdecec] text-[#b42828]'
     : /not started|not scheduled/i.test(status) ? 'bg-[#eef1f5] text-[#5b6b82]'
     : 'bg-[#fff1e6] text-[#b34a00]';
-  return <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-semibold capitalize ${tone}`}>{status.replace(/_/g, ' ')}</span>;
+  return <span className={`inline-block rounded-full px-3 py-1 text-[12px] font-semibold first-letter:uppercase ${tone}`}>{status.replace(/_/g, ' ')}</span>;
 }
 
 export function MapView({ active = false }: { active?: boolean }) {

@@ -13,7 +13,7 @@ import { str, oneOf, wrap, bad, HttpError } from '../validate.js';
 const router = Router();
 const adminOnly = requireRole('admin');
 const supportDesk = requireRole('admin', 'support');
-const lookup = requireRole('admin', 'support', 'compliance');
+const lookup = requireRole('admin', 'support', 'compliance', 'finance');
 // Route-level access: support agents handle tickets, enquiries and look-ups; compliance reviews
 // verification (routes/compliance.js); everything else is Super Admin only.
 router.use('/admin', (req, res, next) => {

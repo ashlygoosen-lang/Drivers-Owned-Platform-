@@ -5,6 +5,7 @@ import { quote, PLACES, CATEGORIES } from '../pricing.js';
 import { str, int, oneOf, wrap, bad, HttpError } from '../validate.js';
 import { PASSENGER_VERIFICATION } from '../config.js';
 import { getVerification, recompute } from '../kyc.js';
+import { paystackEnabled } from '../money/paystack.js';
 
 const router = Router();
 const SERVICES = Object.keys(CATEGORIES);
@@ -62,8 +63,10 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
   if (!option) throw bad('Please choose a vehicle or parcel category.');
   const scheduledFor = b.scheduledFor ? new Date(b.scheduledFor) : null;
   if (scheduledFor && (Number.isNaN(+scheduledFor) || scheduledFor < Date.now() - 5 * 60_000)) throw bad('Please choose a time in the future.');
-  const payment = oneOf(b.payment || req.user.paymentPreference || 'Card', ['Card', 'Cash', 'Business account'], 'Payment method');
+  const preferred = req.user.paymentPreference === 'Card' && !paystackEnabled() ? 'Cash' : req.user.paymentPreference;
+  const payment = oneOf(b.payment || preferred || 'Cash', ['Card', 'Cash', 'Business account'], 'Payment method');
   if (payment === 'Business account' && req.user.role !== 'business') throw bad('Business account payment is only available to business accounts.');
+  if (payment === 'Card' && !paystackEnabled()) throw bad('Card payments are not available yet. Please choose cash.');
 
   const booking = db.insert('bookings', {
     id: id(),
@@ -86,11 +89,12 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
     passengerCommission: 0,
     driverServiceFee: option.driverServiceFee,
     driverEarnings: option.driverEarnings,
-    status: 'requested',
+    status: payment === 'Card' ? 'awaiting_payment' : 'requested',
+    paymentStatus: payment === 'Card' ? 'pending' : payment === 'Cash' ? 'cash' : 'invoice',
     driverId: null,
     rating: null,
     feedback: '',
-    history: [{ status: 'requested', at: now() }],
+    history: [{ status: payment === 'Card' ? 'awaiting_payment' : 'requested', at: now() }],
     createdAt: now(),
   });
   res.status(201).json({ booking: view(booking, req.user) });
@@ -125,8 +129,13 @@ router.post('/bookings/:id/cancel', requireAuth, wrap(async (req, res) => {
   const booking = load(req);
   const isOwner = booking.userId === req.user.id || req.user.role === 'admin';
   if (isOwner) {
-    if (!['requested', 'accepted', 'arriving'].includes(booking.status)) throw bad('This booking can no longer be cancelled.');
-    return res.json({ booking: view(setStatus(booking, 'cancelled', { cancelReason: str(req.body?.reason, 'Reason', { optional: true, max: 200 }) }), req.user) });
+    if (!['awaiting_payment', 'requested', 'accepted', 'arriving'].includes(booking.status)) throw bad('This booking can no longer be cancelled.');
+    let cancelled = setStatus(booking, 'cancelled', { cancelReason: str(req.body?.reason, 'Reason', { optional: true, max: 200 }) });
+    if (cancelled.paymentStatus === 'paid') {
+      const { refundBooking } = await import('./money.js');
+      cancelled = await refundBooking(cancelled);
+    }
+    return res.json({ booking: view(cancelled, req.user) });
   }
   // A driver releasing an accepted trip puts it back in the queue.
   if (booking.driverId === req.user.id && ['accepted', 'arriving'].includes(booking.status)) {

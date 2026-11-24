@@ -97,6 +97,20 @@ export function removeFile(name) {
   if (/^[0-9a-f-]{36}\.bin$/.test(name || '')) fs.promises.unlink(path.join(KYC_DIR, name)).catch(() => {});
 }
 
+/** Encrypt short sensitive text (e.g. bank account numbers) for storage. */
+export function encryptText(text) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', KEY, iv);
+  const body = Buffer.concat([c.update(String(text), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), body]).toString('base64');
+}
+export function decryptText(b64) {
+  const raw = Buffer.from(String(b64 || ''), 'base64');
+  const d = crypto.createDecipheriv('aes-256-gcm', KEY, raw.subarray(0, 12));
+  d.setAuthTag(raw.subarray(12, 28));
+  return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8');
+}
+
 /* ---------------- Records ---------------- */
 export function requirementsFor(role) {
   return REQUIREMENTS[role] || null;

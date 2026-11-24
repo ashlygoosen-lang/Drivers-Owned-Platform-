@@ -7,15 +7,18 @@ import { useLoad, Loading, Empty, Table, type Notify } from './common';
 import { VerificationCentre, VerificationBanner } from './Verification';
 import { VerificationQueue, ExpiringDocuments, AuditLog } from './Compliance';
 import { StaffManager, Notifications } from './Staff';
+import { WalletPanel } from './Wallet';
+import { FinanceOverviewPanel, Payouts, CardsAdmin, Ledger } from './Finance';
 import { VERIFICATION_LABEL } from '../lib/api';
 
 const TABS = {
   passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Places & payment', 'Notifications', 'Profile', 'Support'],
-  driver: ['Overview', 'Verification', 'Ride requests', 'Trip history', 'Vehicle & application', 'Ownership', 'Notifications', 'Profile', 'Support'],
+  driver: ['Overview', 'Verification', 'Ride requests', 'Wallet & card', 'Trip history', 'Vehicle & application', 'Ownership', 'Notifications', 'Profile', 'Support'],
   business: ['Overview', 'Verification', 'Company bookings', 'Employees', 'Invoices', 'Notifications', 'Account', 'Support'],
   compliance: ['Overview', 'Verification queue', 'Expiring documents', 'Audit log', 'Notifications', 'Profile'],
   support: ['Overview', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
-  admin: ['Overview', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications'],
+  finance: ['Overview', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Bookings', 'Users', 'Notifications', 'Profile'],
+  admin: ['Overview', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications'],
 } as const;
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
@@ -225,8 +228,8 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
   if (!user) return null;
   const tabs = TABS[user.role] as readonly string[];
   const customer = ['passenger', 'driver', 'business'].includes(user.role);
-  const openLink = (link: string) => setTab(({ verification: 'Verification', queue: 'Verification queue', application: 'Vehicle & application' } as Record<string, string>)[link] || 'Overview');
-  const overviewAction = { driver: ['View ride requests', () => setTab('Ride requests')], admin: ['Open verification queue', () => setTab('Verification queue')], compliance: ['Open verification queue', () => setTab('Verification queue')], support: ['Open tickets', () => setTab('Tickets')] } as Record<string, [string, () => void]>;
+  const openLink = (link: string) => setTab(({ verification: 'Verification', queue: 'Verification queue', application: 'Vehicle & application', wallet: 'Wallet & card' } as Record<string, string>)[link] || 'Overview');
+  const overviewAction = { driver: ['View ride requests', () => setTab('Ride requests')], admin: ['Open verification queue', () => setTab('Verification queue')], compliance: ['Open verification queue', () => setTab('Verification queue')], support: ['Open tickets', () => setTab('Tickets')], finance: ['Open payouts', () => setTab('Payouts')] } as Record<string, [string, () => void]>;
   const [actionLabel, action] = overviewAction[user.role] || ['Book a journey', onBook];
   const view = () => {
     switch (tab) {
@@ -236,6 +239,11 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
       case 'Expiring documents': return <ExpiringDocuments notify={onNotice} />;
       case 'Audit log': return <AuditLog />;
       case 'Staff': return <StaffManager notify={onNotice} />;
+      case 'Wallet & card': return <WalletPanel notify={onNotice} />;
+      case 'Finance': return <FinanceOverviewPanel notify={onNotice} />;
+      case 'Payouts': return <Payouts notify={onNotice} />;
+      case 'Cards': return <CardsAdmin notify={onNotice} />;
+      case 'Ledger': return <Ledger />;
       case 'Notifications': return <Notifications onOpen={openLink} />;
       case 'My trips': case 'Company bookings': return <Trips onTrack={onTrack} onBook={onBook} />;
       case 'Trip history': return <Trips onTrack={onTrack} driver />;

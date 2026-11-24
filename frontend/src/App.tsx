@@ -51,6 +51,15 @@ function Page() {
   useDropMotion();
 
   useEffect(() => { api<{ places: string[] }>('/places').then((r) => setPlaces(r.places)).catch(() => setPlaces(['Cape Town City Centre', 'V&A Waterfront', 'Cape Town International Airport', 'Sea Point Promenade'])); }, []);
+  // Back from Paystack checkout: confirm the payment with the server, then show the trip.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('payment_ref');
+    if (!ref || !user) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    api<{ booking: Booking }>(`/payments/verify/${encodeURIComponent(ref)}`)
+      .then((r) => { setNotice('Payment received. We’re finding your driver.'); setModalTitle(''); setModal({ kind: 'booking', draft: { service: r.booking.service, pickup: r.booking.pickup, destination: r.booking.destination, when: 'Now', passengers: r.booking.passengers || 1 }, existing: r.booking }); })
+      .catch((e) => setNotice((e as Error).message));
+  }, [user]);
   useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(t); }, [notice]);
   useEffect(() => { document.body.style.overflow = menu ? 'hidden' : ''; }, [menu]);
 
@@ -88,7 +97,7 @@ function Page() {
   const title = modal?.kind === 'booking' ? modalTitle || `${modal.draft.service} · Let’s get you moving`
     : modal?.kind === 'auth' ? 'Welcome to DROP.'
     : modal?.kind === 'driver' ? 'Your next chapter starts here.'
-    : modal?.kind === 'dashboard' ? ({ admin: 'Super Admin dashboard', compliance: 'Compliance dashboard', support: 'Support desk', passenger: 'My DROP', driver: 'Driver dashboard', business: 'Business dashboard' } as Record<string, string>)[user?.role || ''] || 'Dashboard'
+    : modal?.kind === 'dashboard' ? ({ admin: 'Super Admin dashboard', compliance: 'Compliance dashboard', support: 'Support desk', finance: 'Finance dashboard', passenger: 'My DROP', driver: 'Driver dashboard', business: 'Business dashboard' } as Record<string, string>)[user?.role || ''] || 'Dashboard'
     : modalTitle;
 
   return <div>

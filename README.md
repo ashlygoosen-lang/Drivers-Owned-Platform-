@@ -23,6 +23,8 @@ docs/       Brand guide and apps roadmap
 | Verification (KYC) | Everyone uploads ID and proof of address; drivers add a selfie with ID, driving licence, PrDP, vehicle registration and insurance; businesses add CIPC registration. SA ID numbers are checked, files are content-checked and encrypted at rest, and each document is approved or rejected with a reason. Expiry tracking and reminders. See `docs/VERIFICATION.md` |
 | Compliance officer | Verification queue, side-by-side document review, approve/reject with reasons, final decision, expiring documents, audit log |
 | Support agent | Tickets, enquiries, user and trip look-up (no access to ID documents) |
+| Payments & DROP card | Passenger card payments via Paystack into the pool account; trip earnings settle to driver wallets on completion; DROP Driver Card issued through Paymentology (Sprint Companion API) that spends from the wallet; withdrawals by EFT; double-entry ledger. See `docs/PAYMENTS.md` |
+| Finance officer | Pool/escrow/wallet balances, payouts with bank payment file, cards, card transactions, ledger, reconciliation |
 | Super Admin | Approve / decline driver applications, view uploaded documents securely, manage users and drivers (suspend / reinstate), all bookings, support tickets with replies, website enquiries |
 | Public | Contact / business / careers / report-an-issue forms, live fee table, safety, privacy and terms summaries |
 
