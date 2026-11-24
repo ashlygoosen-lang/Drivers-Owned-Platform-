@@ -32,7 +32,7 @@ export function ContactForm({ topic = 'General enquiry', onSent }: { topic?: str
     <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
     <ErrorText>{error}</ErrorText>
     <button className={button} disabled={busy}>{busy && <Spinner />}Send message <Icon name="arrow" size={16} /></button>
-    <p className="text-[12px] text-[#64735c]">For emergencies, contact SAPS on 10111 or 112 from a mobile phone.</p>
+    <p className="text-[12px] text-[#735f5c]">For emergencies, contact SAPS on 10111 or 112 from a mobile phone.</p>
   </form>;
 }
 
@@ -41,10 +41,10 @@ function FeeTable() {
   const [data, setData] = useState<Tariffs | null>(null);
   useEffect(() => { api<{ services: Tariffs }>('/services').then((r) => setData(r.services)).catch(() => setData({})); }, []);
   if (!data) return <p className="flex items-center gap-2"><Spinner /> Loading tariffs…</p>;
-  return <div className="grid gap-4">{Object.entries(data).map(([service, cats]) => <div key={service} className="overflow-x-auto rounded-xl border border-[#dce3d3]">
-    <table className="w-full min-w-[420px] text-left text-[13px]"><caption className="bg-[#eef2e7] px-4 py-2 text-left font-semibold text-forest">{service}</caption>
-      <thead><tr className="border-b border-[#e3e9db]"><th className="p-3 font-medium">Category</th><th className="p-3 font-medium">Base</th><th className="p-3 font-medium">Per km</th><th className="p-3 font-medium">Per min</th><th className="p-3 font-medium">Minimum</th></tr></thead>
-      <tbody>{Object.entries(cats).map(([name, t]) => <tr key={name} className="border-b border-[#eef2e8] last:border-0"><td className="p-3">{name}</td><td className="p-3">{money(t.base)}</td><td className="p-3">{money(t.perKm)}</td><td className="p-3">{money(t.perMin)}</td><td className="p-3">{money(t.minimum)}</td></tr>)}</tbody>
+  return <div className="grid gap-4">{Object.entries(data).map(([service, cats]) => <div key={service} className="overflow-x-auto rounded-xl border border-[#e4ddd2]">
+    <table className="w-full min-w-[420px] text-left text-[13px]"><caption className="bg-[#f3eee6] px-4 py-2 text-left font-semibold text-forest">{service}</caption>
+      <thead><tr className="border-b border-[#eae4da]"><th className="p-3 font-medium">Category</th><th className="p-3 font-medium">Base</th><th className="p-3 font-medium">Per km</th><th className="p-3 font-medium">Per min</th><th className="p-3 font-medium">Minimum</th></tr></thead>
+      <tbody>{Object.entries(cats).map(([name, t]) => <tr key={name} className="border-b border-[#f2eee8] last:border-0"><td className="p-3">{name}</td><td className="p-3">{money(t.base)}</td><td className="p-3">{money(t.perKm)}</td><td className="p-3">{money(t.perMin)}</td><td className="p-3">{money(t.minimum)}</td></tr>)}</tbody>
     </table></div>)}</div>;
 }
 
@@ -53,11 +53,11 @@ export function InfoPanel({ topic, onBook, onDriver, onApps, onNotice, onClose, 
 }) {
   const sent = (ref: string) => { onNotice(`Thank you. Your message (${ref}) has reached the DROP team and we'll be in touch.`); onClose(); };
   const t = topic.toLowerCase();
-  const p = 'text-sm leading-7 text-[#54664e]';
+  const p = 'text-sm leading-7 text-[#66514e]';
 
   if (/ownership/.test(t)) return <div className={`grid gap-5 ${p}`}>
     <p>DROP is built on a simple idea: the people who do the driving should share in the platform they build. Passengers pay the fare with no added passenger platform commission, and drivers keep the fare less one clearly disclosed service fee.</p>
-    <div className="rounded-xl bg-[#ecf2e3] p-5"><h3 className="mb-2 font-semibold text-forest">Three distinct things</h3>
+    <div className="rounded-xl bg-[#f3ede2] p-5"><h3 className="mb-2 font-semibold text-forest">Three distinct things</h3>
       <p><b>Participation:</b> a voice in the driver community, programme updates and feedback forums.</p>
       <p><b>Membership:</b> eligibility-based admission to the driver-owner programme, under its own terms.</p>
       <p><b>Equity ownership:</b> any shareholding requires formal legal agreements. It is never automatic or guaranteed.</p></div>

@@ -24,12 +24,12 @@ function useLoad<T>(path: string | null) {
   return { data, error, reload };
 }
 
-function Loading() { return <p className="flex items-center gap-3 py-6 text-sm text-[#5d6c55]"><Spinner /> Loading…</p>; }
-function Empty({ children }: { children: React.ReactNode }) { return <p className="rounded-xl border border-dashed border-[#d3dccb] p-6 text-center text-sm text-[#5d6c55]">{children}</p>; }
+function Loading() { return <p className="flex items-center gap-3 py-6 text-sm text-[#6c5855]"><Spinner /> Loading…</p>; }
+function Empty({ children }: { children: React.ReactNode }) { return <p className="rounded-xl border border-dashed border-[#ddd6ca] p-6 text-center text-sm text-[#6c5855]">{children}</p>; }
 
 function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
-  return <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b border-[#dce4d2]">{head.map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead>
-    <tbody>{rows.map((r, i) => <tr key={i} className="table-row border-b border-[#e7ecdf] align-top">{r.map((c, j) => <td key={j} className="p-3">{c}</td>)}</tr>)}</tbody></table></div>;
+  return <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b border-[#e5ded1]">{head.map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead>
+    <tbody>{rows.map((r, i) => <tr key={i} className="table-row border-b border-[#ede7de] align-top">{r.map((c, j) => <td key={j} className="p-3">{c}</td>)}</tr>)}</tbody></table></div>;
 }
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
@@ -38,11 +38,11 @@ function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel
   if (!data) return <Loading />;
   const max = Math.max(1, ...data.chart.data.map((d) => d.value));
   return <>
-    <div className={`grid gap-3 sm:grid-cols-2 ${data.stats.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>{data.stats.map((s) => <div key={s.label} className="stat-card rounded-lg bg-[#f1f4eb] p-4"><p className="text-[12px] text-[#617058]">{s.label}</p><p className="mt-2 text-2xl font-semibold"><Counter value={s.value} money={s.money} /></p></div>)}</div>
-    <div className="chart my-6 flex h-40 items-end justify-around gap-3 border-b border-[#d8e0d0] px-3" role="img" aria-label={`${data.chart.title}: ${data.chart.data.map((d) => `${d.day} ${d.value}`).join(', ')}`}>
-      {data.chart.data.map((d, i) => <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-[11px] text-[#617058]">{d.value ? (data.chart.money ? money(d.value) : d.value) : ''}</span><div className="chart-bar w-full max-w-10 rounded-t bg-[#4a7753]" style={{ height: `${Math.max(2, (d.value / max) * 80)}%`, animationDelay: `${i * 60}ms` }} /><span className="text-[12px] text-[#627057]">{d.day}</span></div>)}
+    <div className={`grid gap-3 sm:grid-cols-2 ${data.stats.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>{data.stats.map((s) => <div key={s.label} className="stat-card rounded-lg bg-[#f4f1eb] p-4"><p className="text-[12px] text-[#705b58]">{s.label}</p><p className="mt-2 text-2xl font-semibold"><Counter value={s.value} money={s.money} /></p></div>)}</div>
+    <div className="chart my-6 flex h-40 items-end justify-around gap-3 border-b border-[#e1dacf] px-3" role="img" aria-label={`${data.chart.title}: ${data.chart.data.map((d) => `${d.day} ${d.value}`).join(', ')}`}>
+      {data.chart.data.map((d, i) => <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><span className="text-[11px] text-[#705b58]">{d.value ? (data.chart.money ? money(d.value) : d.value) : ''}</span><div className="chart-bar w-full max-w-10 rounded-t bg-[#6e5753]" style={{ height: `${Math.max(2, (d.value / max) * 80)}%`, animationDelay: `${i * 60}ms` }} /><span className="text-[12px] text-[#705a57]">{d.day}</span></div>)}
     </div>
-    <p className="text-[12px] text-[#637159]">{data.chart.title}</p>
+    <p className="text-[12px] text-[#715c59]">{data.chart.title}</p>
     <button className={`${button} mt-6`} onClick={onAction}>{actionLabel}<Icon name="arrow" size={16} /></button>
   </>;
 }
@@ -54,7 +54,7 @@ function Trips({ onTrack, onBook, driver = false }: { onTrack: (b: Booking) => v
   if (!data.bookings.length) return <Empty>No trips yet.{onBook && <> <button className="font-semibold underline" onClick={onBook}>Book your first journey</button></>}</Empty>;
   return <Table head={['Reference', 'Journey', driver ? 'You earned' : 'Fare', 'Status', '']} rows={data.bookings.map((b) => [
     <b key="r">{b.ref}</b>,
-    <span key="j">{b.pickup} → {b.destination}<span className="block text-[12px] text-[#5d6c55]">{b.service} · {b.category} · {date(b.createdAt)}{b.passengerName && ` · ${b.passengerName}`}</span></span>,
+    <span key="j">{b.pickup} → {b.destination}<span className="block text-[12px] text-[#6c5855]">{b.service} · {b.category} · {date(b.createdAt)}{b.passengerName && ` · ${b.passengerName}`}</span></span>,
     money(driver ? b.driverEarnings : b.fare),
     <StatusPill key="s" status={b.status === 'requested' ? 'requested' : STATUS_LABEL[b.status]} />,
     driver ? '' : <button key="t" className="min-h-11 text-sm font-semibold underline" onClick={() => onTrack(b)}>{['completed', 'cancelled'].includes(b.status) ? (b.status === 'completed' && !b.rating ? 'Rate' : 'View') : 'Track'}</button>,
@@ -88,7 +88,7 @@ function ProfileForm({ notify, places = false }: { notify: Notify; places?: bool
       {user.role === 'business' && <Field label="Company name"><input name="company" defaultValue={user.company} className={input} /></Field>}
       <Field label="Mobile number"><input name="phone" type="tel" defaultValue={user.phone} className={input} /></Field>
       <Field label="Notifications"><select name="notifications" defaultValue={user.notifications} className={input}><option>Email</option><option>SMS</option><option>None</option></select></Field>
-      <details className="rounded-lg border border-[#dce3d3] p-4"><summary className="cursor-pointer text-sm font-semibold">Change password</summary><div className="mt-4 grid gap-4"><Field label="Current password"><input name="currentPassword" type="password" autoComplete="current-password" className={input} /></Field><Field label="New password"><input name="newPassword" type="password" minLength={8} autoComplete="new-password" className={input} /></Field></div></details>
+      <details className="rounded-lg border border-[#e4ddd2] p-4"><summary className="cursor-pointer text-sm font-semibold">Change password</summary><div className="mt-4 grid gap-4"><Field label="Current password"><input name="currentPassword" type="password" autoComplete="current-password" className={input} /></Field><Field label="New password"><input name="newPassword" type="password" minLength={8} autoComplete="new-password" className={input} /></Field></div></details>
     </>}
     <ErrorText>{error}</ErrorText>
     <button className={button} disabled={busy}>{busy && <Spinner />}Save changes</button>
@@ -111,9 +111,9 @@ function Support({ notify }: { notify: Notify }) {
       <Field label="Tell us what happened"><textarea name="message" required minLength={10} rows={4} className={`${input} py-3`} /></Field>
       <ErrorText>{error}</ErrorText>
       <button className={button}>Open a ticket</button>
-      <p className="text-[12px] text-[#5d6c55]">In an emergency, call SAPS on 10111 first.</p>
+      <p className="text-[12px] text-[#6c5855]">In an emergency, call SAPS on 10111 first.</p>
     </form>
-    <div><h4 className="mb-3 text-sm font-semibold">Your tickets</h4>{!data ? <Loading /> : !data.tickets.length ? <Empty>No tickets yet.</Empty> : <ul className="grid gap-3">{data.tickets.map((t) => <li key={t.id} className="rounded-lg border border-[#e0e6d8] p-4 text-sm"><div className="flex items-center justify-between gap-3"><b>{t.ref} · {t.type}</b><StatusPill status={t.status} /></div><p className="mt-2 text-[#5d6c55]">{t.message}</p>{t.replies.map((r, i) => <p key={i} className="mt-3 rounded bg-[#eef3e6] p-3"><b>{r.by}:</b> {r.message}</p>)}</li>)}</ul>}</div>
+    <div><h4 className="mb-3 text-sm font-semibold">Your tickets</h4>{!data ? <Loading /> : !data.tickets.length ? <Empty>No tickets yet.</Empty> : <ul className="grid gap-3">{data.tickets.map((t) => <li key={t.id} className="rounded-lg border border-[#e7e1d7] p-4 text-sm"><div className="flex items-center justify-between gap-3"><b>{t.ref} · {t.type}</b><StatusPill status={t.status} /></div><p className="mt-2 text-[#6c5855]">{t.message}</p>{t.replies.map((r, i) => <p key={i} className="mt-3 rounded bg-[#f4eee5] p-3"><b>{r.by}:</b> {r.message}</p>)}</li>)}</ul>}</div>
   </div>;
 }
 
@@ -131,12 +131,12 @@ function DriverRequests({ notify }: { notify: Notify }) {
   const a = state?.active;
   const NEXT: Record<string, string> = { accepted: 'I’m on my way to pickup', arriving: 'Passenger collected · start trip', in_progress: 'Complete trip' };
   return <div className="grid gap-4">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f1f4eb] p-4"><p className="text-sm">{approved ? (user.online ? 'You’re online and visible for new requests.' : 'Go online to receive ride and delivery requests.') : 'Your account is awaiting activation. You can go online once your application is approved.'}</p><button className={user.online ? button : outline} aria-pressed={!!user.online} disabled={!approved} onClick={toggle}>{user.online ? '● Online' : '○ Go online'}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f4f1eb] p-4"><p className="text-sm">{approved ? (user.online ? 'You’re online and visible for new requests.' : 'Go online to receive ride and delivery requests.') : 'Your account is awaiting activation. You can go online once your application is approved.'}</p><button className={user.online ? button : outline} aria-pressed={!!user.online} disabled={!approved} onClick={toggle}>{user.online ? '● Online' : '○ Go online'}</button></div>
     <ErrorText>{error}</ErrorText>
-    {a && <div className="rounded-xl border border-forest bg-[#eef3e6] p-5"><StatusPill status={STATUS_LABEL[a.status]} /><h4 className="mt-3 font-semibold">{a.pickup} → {a.destination}</h4><p className="my-2 text-sm">{a.passenger?.name}{a.passenger?.phone && <> · <a className="underline" href={`tel:${a.passenger.phone}`}>{a.passenger.phone}</a></>}<br />{a.distanceKm} km · {money(a.fare)} fare · you keep {money(a.driverEarnings)} · {a.payment}{a.notes && <><br />Note: {a.notes}</>}{a.parcel && <><br />Parcel: {a.parcel}</>}</p>
+    {a && <div className="rounded-xl border border-forest bg-[#f4eee5] p-5"><StatusPill status={STATUS_LABEL[a.status]} /><h4 className="mt-3 font-semibold">{a.pickup} → {a.destination}</h4><p className="my-2 text-sm">{a.passenger?.name}{a.passenger?.phone && <> · <a className="underline" href={`tel:${a.passenger.phone}`}>{a.passenger.phone}</a></>}<br />{a.distanceKm} km · {money(a.fare)} fare · you keep {money(a.driverEarnings)} · {a.payment}{a.notes && <><br />Note: {a.notes}</>}{a.parcel && <><br />Parcel: {a.parcel}</>}</p>
       <div className="flex flex-wrap gap-3"><button className={button} onClick={() => act(`/drivers/bookings/${a.id}/advance`, a.status === 'in_progress' ? `Trip ${a.ref} complete. ${money(a.driverEarnings)} added to your earnings.` : 'Trip updated.')}>{NEXT[a.status]}</button>{a.status !== 'in_progress' && <button className={outline} onClick={() => act(`/bookings/${a.id}/cancel`, 'Trip released back to other drivers.')}>Release trip</button>}</div>
       <div className="mt-5 h-60"><MapView active /></div></div>}
-    {user.online && !a && (!state ? <Loading /> : state.requests.length ? state.requests.map((b) => <div key={b.id} className="request-card rounded-xl bg-[#eef3e6] p-5"><h4 className="font-semibold">{b.pickup} → {b.destination}</h4><p className="my-3 text-sm">{b.service} · {b.category} · {b.distanceKm} km · fare {money(b.fare)} · you keep {money(b.driverEarnings)}{b.scheduledFor && <><br />Scheduled: {date(b.scheduledFor)}</>}</p><button className={button} onClick={() => act(`/drivers/bookings/${b.id}/accept`, `Request ${b.ref} accepted. Head to the pickup point.`)}>Accept request</button></div>) : <Empty>No open requests right now. This list refreshes automatically.</Empty>)}
+    {user.online && !a && (!state ? <Loading /> : state.requests.length ? state.requests.map((b) => <div key={b.id} className="request-card rounded-xl bg-[#f4eee5] p-5"><h4 className="font-semibold">{b.pickup} → {b.destination}</h4><p className="my-3 text-sm">{b.service} · {b.category} · {b.distanceKm} km · fare {money(b.fare)} · you keep {money(b.driverEarnings)}{b.scheduledFor && <><br />Scheduled: {date(b.scheduledFor)}</>}</p><button className={button} onClick={() => act(`/drivers/bookings/${b.id}/accept`, `Request ${b.ref} accepted. Head to the pickup point.`)}>Accept request</button></div>) : <Empty>No open requests right now. This list refreshes automatically.</Empty>)}
   </div>;
 }
 
@@ -147,7 +147,7 @@ function DriverApplication() {
   if (!a) return <Empty>No application on file.</Empty>;
   return <div className="grid gap-4 text-sm"><div className="flex items-center gap-3"><b>{a.ref}</b><StatusPill status={a.status} /></div>
     <Table head={['Check', 'Status']} rows={[['Documents', <StatusPill key="d" status="received" />], ['Identity verification', <StatusPill key="i" status={a.checks.identity} />], ['Vehicle inspection', <StatusPill key="v" status={a.checks.inspection} />], ['Account activation', <StatusPill key="a" status={a.checks.activation} />]]} />
-    <p>Vehicle: {a.vehicle} · Programme: {a.participation}{a.city && ` · ${a.city}`}</p>{a.notes && <p className="rounded-lg bg-[#eef3e6] p-3">Note from onboarding: {a.notes}</p>}</div>;
+    <p>Vehicle: {a.vehicle} · Programme: {a.participation}{a.city && ` · ${a.city}`}</p>{a.notes && <p className="rounded-lg bg-[#f4eee5] p-3">Note from onboarding: {a.notes}</p>}</div>;
 }
 
 /* ---------------- Business ---------------- */
@@ -181,10 +181,10 @@ function AdminApplications({ notify }: { notify: Notify }) {
     const notes = status === 'rejected' ? window.prompt('Reason for declining (shared with the applicant):') ?? '' : '';
     try { await api(`/admin/applications/${a.id}`, { method: 'PATCH', body: { status, notes } }); notify(`${a.ref} marked ${status.replace('_', ' ')}.`); void reload(); } catch (err) { notify((err as Error).message); }
   };
-  return <div className="grid gap-4">{data.applications.map((a) => <div key={a.id} className="rounded-xl border border-[#dce3d3] p-5 text-sm">
+  return <div className="grid gap-4">{data.applications.map((a) => <div key={a.id} className="rounded-xl border border-[#e4ddd2] p-5 text-sm">
     <div className="flex flex-wrap items-center justify-between gap-3"><b>{a.ref} · {a.applicant?.name}</b><StatusPill status={a.status} /></div>
-    <p className="my-2 text-[#5d6c55]">{a.applicant?.email} · {a.applicant?.phone} · {a.participation} · {a.city} · {a.vehicle} · {date(a.createdAt)}</p>
-    <div className="my-3 flex flex-wrap gap-2">{Object.entries(a.documents).map(([k, d]) => <button key={k} className="flex min-h-10 items-center gap-2 rounded-lg bg-[#eef3e6] px-3 text-[13px]" onClick={() => openProtectedFile(`/admin/files/${d.file}`).catch((e) => notify(e.message))}><Icon name="file" size={15} />{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</button>)}</div>
+    <p className="my-2 text-[#6c5855]">{a.applicant?.email} · {a.applicant?.phone} · {a.participation} · {a.city} · {a.vehicle} · {date(a.createdAt)}</p>
+    <div className="my-3 flex flex-wrap gap-2">{Object.entries(a.documents).map(([k, d]) => <button key={k} className="flex min-h-10 items-center gap-2 rounded-lg bg-[#f4eee5] px-3 text-[13px]" onClick={() => openProtectedFile(`/admin/files/${d.file}`).catch((e) => notify(e.message))}><Icon name="file" size={15} />{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</button>)}</div>
     {a.status !== 'approved' && <div className="flex flex-wrap gap-2">{a.status === 'submitted' && <button className={outline} onClick={() => decide(a, 'under_review')}>Start review</button>}<button className={button} onClick={() => decide(a, 'approved')}>Approve & activate</button>{a.status !== 'rejected' && <button className="min-h-11 px-3 text-red-800 underline" onClick={() => decide(a, 'rejected')}>Decline</button>}</div>}
   </div>)}</div>;
 }
@@ -213,7 +213,7 @@ function AdminTickets({ notify }: { notify: Notify }) {
   if (!data) return <Loading />;
   if (!data.tickets.length) return <Empty>No support tickets.</Empty>;
   const update = async (t: Ticket, body: object) => { try { await api(`/admin/tickets/${t.id}`, { method: 'PATCH', body }); notify('Ticket updated.'); void reload(); } catch (err) { notify((err as Error).message); } };
-  return <ul className="grid gap-3">{data.tickets.map((t) => <li key={t.id} className="rounded-xl border border-[#dce3d3] p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><b>{t.ref} · {t.type}{t.priority === 'urgent' && <span className="ml-2 text-red-800">URGENT</span>}</b><StatusPill status={t.status} /></div><p className="mt-1 text-[12px] text-[#5d6c55]">{t.user?.name} · {t.user?.email}{t.bookingRef && ` · ${t.bookingRef}`} · {date(t.createdAt)}</p><p className="my-3">{t.message}</p>{t.replies.map((r, i) => <p key={i} className="mb-2 rounded bg-[#eef3e6] p-2"><b>{r.by}:</b> {r.message}</p>)}
+  return <ul className="grid gap-3">{data.tickets.map((t) => <li key={t.id} className="rounded-xl border border-[#e4ddd2] p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><b>{t.ref} · {t.type}{t.priority === 'urgent' && <span className="ml-2 text-red-800">URGENT</span>}</b><StatusPill status={t.status} /></div><p className="mt-1 text-[12px] text-[#6c5855]">{t.user?.name} · {t.user?.email}{t.bookingRef && ` · ${t.bookingRef}`} · {date(t.createdAt)}</p><p className="my-3">{t.message}</p>{t.replies.map((r, i) => <p key={i} className="mb-2 rounded bg-[#f4eee5] p-2"><b>{r.by}:</b> {r.message}</p>)}
     <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); void update(t, { reply: f.get('reply') || undefined, status: f.get('status') }); (e.currentTarget.elements.namedItem('reply') as HTMLInputElement).value = ''; }}><input name="reply" className={`${input} min-w-48 flex-1`} placeholder="Add a reply" aria-label="Reply" /><select name="status" defaultValue={t.status} className={`${input} w-40`} aria-label="Status"><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select><button className={button}>Update</button></form></li>)}</ul>;
 }
 
@@ -222,7 +222,7 @@ function AdminEnquiries({ notify }: { notify: Notify }) {
   if (!data) return <Loading />;
   if (!data.enquiries.length) return <Empty>No enquiries yet.</Empty>;
   return <Table head={['Ref', 'From', 'Topic', 'Message', 'Status']} rows={data.enquiries.map((e) => [e.ref, <span key="f">{e.name}<span className="block text-[12px]"><a className="underline" href={`mailto:${e.email}`}>{e.email}</a>{e.phone && ` · ${e.phone}`}{e.company && ` · ${e.company}`}</span></span>, e.topic, <span key="m" className="block max-w-xs whitespace-pre-wrap">{e.message}</span>,
-    <select key="s" className="rounded border border-[#dce3d3] bg-white p-2 text-[13px]" defaultValue={e.status} aria-label="Enquiry status" onChange={async (ev) => { await api(`/admin/enquiries/${e.id}`, { method: 'PATCH', body: { status: ev.target.value } }); notify('Enquiry updated.'); void reload(); }}><option value="new">New</option><option value="contacted">Contacted</option><option value="closed">Closed</option></select>])} />;
+    <select key="s" className="rounded border border-[#e4ddd2] bg-white p-2 text-[13px]" defaultValue={e.status} aria-label="Enquiry status" onChange={async (ev) => { await api(`/admin/enquiries/${e.id}`, { method: 'PATCH', body: { status: ev.target.value } }); notify('Enquiry updated.'); void reload(); }}><option value="new">New</option><option value="contacted">Contacted</option><option value="closed">Closed</option></select>])} />;
 }
 
 /* ---------------- Shell ---------------- */
@@ -254,10 +254,10 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut 
     }
   };
   return <div>
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#edf2e3] p-3 text-sm"><span>Signed in as <b>{user.name}</b> · {user.email}{user.role === 'driver' && user.driverStatus !== 'approved' && ' · activation pending'}</span><button className="flex min-h-10 items-center gap-2 font-semibold" onClick={() => { signOut(); onSignedOut(); onNotice('You have been signed out.'); }}><Icon name="logout" size={17} />Sign out</button></div>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#f3ede2] p-3 text-sm"><span>Signed in as <b>{user.name}</b> · {user.email}{user.role === 'driver' && user.driverStatus !== 'approved' && ' · activation pending'}</span><button className="flex min-h-10 items-center gap-2 font-semibold" onClick={() => { signOut(); onSignedOut(); onNotice('You have been signed out.'); }}><Icon name="logout" size={17} />Sign out</button></div>
     <div className="grid gap-5 md:grid-cols-[200px_1fr]">
-      <nav className="dash-nav flex flex-wrap content-start gap-1 md:flex-col" aria-label="Dashboard navigation">{tabs.map((t) => <button onClick={() => t === 'Book a ride' ? onBook() : setTab(t)} key={t} aria-current={tab === t ? 'page' : undefined} className={`min-h-11 rounded-lg px-3 text-left text-sm ${tab === t ? 'bg-[#e4ecd8] font-semibold' : 'hover:bg-[#edf1e7]'}`}>{t}</button>)}</nav>
-      <div className="min-w-0 rounded-xl border border-[#dce3d4] bg-white p-5"><h3 className="mb-5 text-xl font-semibold">{tab}</h3><div className="step-panel" key={tab}>{view()}</div></div>
+      <nav className="dash-nav flex flex-wrap content-start gap-1 md:flex-col" aria-label="Dashboard navigation">{tabs.map((t) => <button onClick={() => t === 'Book a ride' ? onBook() : setTab(t)} key={t} aria-current={tab === t ? 'page' : undefined} className={`min-h-11 rounded-lg px-3 text-left text-sm ${tab === t ? 'bg-[#ede5d7] font-semibold' : 'hover:bg-[#f2ede7]'}`}>{t}</button>)}</nav>
+      <div className="min-w-0 rounded-xl border border-[#e4ded3] bg-white p-5"><h3 className="mb-5 text-xl font-semibold">{tab}</h3><div className="step-panel" key={tab}>{view()}</div></div>
     </div>
   </div>;
 }
