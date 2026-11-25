@@ -60,7 +60,7 @@ These are the first things to run once §5 items 1–8 are done.
 | Risk | Level | What to do |
 |---|---|---|
 | Owner configuration not done (secrets, demo mode, backups, MFA on GitHub) | **High until done** | §5 items 1–4: about an hour of work, mostly free |
-| Memory ceiling at sustained peak volume: each server keeps all records in memory | Medium (weeks away at target load) | Phase 6B-1 hot-data window, before sustained national volume |
+| ~~Memory ceiling at sustained peak volume~~ | Fixed 25 Nov | Hot-data window built: 300,000 old trips use 6 MB instead of 2 GB; ledger stays exact and self-checks hourly (06 §5) |
 | ~~Every open request shown to every driver~~ | Fixed 25 Nov | Proximity dispatch built: 100 % of trips matched vs 64 %, 60 % fewer wasted accepts (06 §5) |
 | CSP allows broad Google script sources (SEC-015) | Low | Move to Google's nonce-based strict CSP |
 | Staff start with an admin-chosen password (SEC-020) | Low (MFA required anyway) | Invite link with set-your-own password |
@@ -86,7 +86,7 @@ Prices are estimates from the providers' published plans and change; check them 
 
 ## 6. Recommended next work
 
-1. **Phase 6B-1 and 6B-2:** hot-data window and proximity dispatch. These two items unlock sustained target load and remove most peak traffic.
+1. **Done 25 Nov:** Phase 6B-1 (hot-data window) and 6B-2 (proximity dispatch). Next: confirm them on staging with the k6 soak test.
 2. **Low findings:** SEC-015, SEC-020 and SEC-023, about a day together.
 3. **Push instead of polling** in the apps, an outbox for emails and payments, and circuit breakers on external providers (06 §5).
 4. **After launch:** a quarterly re-run of this review (findings register, threat model, dependency audit) and a yearly external penetration test.

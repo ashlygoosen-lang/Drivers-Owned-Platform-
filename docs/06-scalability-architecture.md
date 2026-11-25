@@ -110,7 +110,21 @@ Always run at least **2 servers in production** so a deploy or crash never takes
 
 These are known limits, in priority order.
 
-1. **Hot-data window (memory ceiling) — HIGH.** Each server currently keeps every record in memory. At 2,000 bookings/min peak, a busy day adds hundreds of MB, so memory would run out within weeks. Fix: keep only open trips, recent trips (e.g. 30 days) and live records in memory; serve history, reports and the ledger with SQL queries. Until then, watch the memory graph on Railway and the write-queue/pool numbers on `/api/ready`.
+1. **Hot-data window (memory ceiling) — DONE (25 Nov 2026).** In PostgreSQL mode each server keeps only live and recent records in memory (`HOT_WINDOW_DAYS`, default 14, minimum 8). Finished trips, chat, notifications, calls and ledger entries older than that stay in PostgreSQL and are read with indexed SQL: trip history, dashboards and invoices, staff search, receipts, payment webhooks, ratings, notifications, statements and the journal export (`src/history.js`). Opening an old trip loads it back on demand. Anything the money jobs still need stays in memory: unsettled trips, pending refunds, and paid trips that were cancelled. Nothing is deleted. Eviction runs hourly; `/api/ready` shows what is in memory.
+   - **Ledger, exactly.** Entries never change, so entries outside memory are summed once per account and balance = that sum + recent entries, in cents. An entry leaving memory moves into the sum. The leader re-checks every balance against PostgreSQL hourly; a difference seen in three checks in a row is reported (`ledger_mismatch`, high) and repaired from the database.
+   - **Measured:** with 300,000 trips older than the window in PostgreSQL:
+
+     | | Window on | Window off (before) |
+     |---|---|---|
+     | Server memory | **6 MB** | 2,055 MB |
+     | Startup | 4.5 s | 15.6 s |
+     | A passenger's trip history | 4 ms | 17 ms |
+     | A driver's all-time totals | 11 ms | 23 ms |
+
+   - **Two bugs found and fixed while building this.**
+     - *Ledger totals (CPU).* Every ledger entry written by another server made each server re-add every entry it held, so the work grew with the square of traffic. New entries are now added to the totals directly.
+     - *Change feed (correctness).* A write that committed after a later-numbered one could be missed by other servers for good. Missing sequence numbers are now tracked and fetched once they commit. `test/feed.test.js` fails on the old code and passes on the new.
+   - Tests: `history.test.js`, `ledger-window.test.js`, `feed.test.js`. Final load test (both 6B changes, ~1,140 bookings/min): every trip completed, p95 under 120 ms on every booking endpoint, all correctness checks pass (`loadtest/results/2026-11-25-final-6b-1200pm.json`).
 2. **Proximity dispatch — DONE (25 Nov 2026).** `src/dispatch.js` offers each request to the nearest 5 available drivers within 8 km, doubling the drivers and adding 5 km each minute, and falls back to every driver after 4 minutes. Requests are matched oldest first and a driver holds at most 2 offers, so clusters (malls, airports) spread out. Requests without coordinates, and drivers who share no GPS, keep the old behaviour. `DISPATCH_MODE=broadcast` switches it off; the other `DISPATCH_*` settings tune it. Side-by-side load test, same machine, ~1,100 bookings/min, drivers with human pacing:
 
    | | Broadcast (before) | Nearest (now) |
