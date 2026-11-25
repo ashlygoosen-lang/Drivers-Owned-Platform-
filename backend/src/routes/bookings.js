@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { invalidate as invalidateDispatch } from '../dispatch.js';
 import { db, id, now, nextRef } from '../db.js';
 import { requireAuth, optionalAuth } from '../auth.js';
 import { quote, PLACES, CATEGORIES } from '../pricing.js';
@@ -117,7 +118,8 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
     conflict: (b) => (openSlot && b.openSlot === openSlot && OPEN.includes(b.status)) || (idemKey && b.idemKey === idemKey),
     message: 'You already have a trip in progress. Finish or cancel it before booking another.',
   });
-  await tripPoints(booking); // coordinates for the live map
+  await tripPoints(booking); // coordinates for the live map and for nearest-driver dispatch
+  if (booking.status === 'requested') invalidateDispatch();
   res.status(201).json({ booking: view(booking, req.user) });
 }));
 

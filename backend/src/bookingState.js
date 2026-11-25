@@ -1,4 +1,5 @@
 import { db, now } from './db.js';
+import { invalidate as invalidateDispatch } from './dispatch.js';
 import { HttpError } from './validate.js';
 import { onTripStatus } from './routes/comms.js';
 import { onTrackingStatus } from './routes/tracking.js';
@@ -36,5 +37,6 @@ export async function transition(booking, to, extra = {}, { from, when = {}, not
   if (!updated) throw new HttpError(409, to === 'accepted' ? 'This request is no longer available.' : 'This trip was just updated by someone else. Please refresh.');
   onTrackingStatus(updated);
   onTripStatus(updated);
+  if (to === 'requested') invalidateDispatch(); // a new open request: offer it soon
   return updated;
 }

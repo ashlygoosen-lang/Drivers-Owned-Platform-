@@ -7,6 +7,8 @@ import { optionalAuth, requireRole, publicUser } from '../auth.js';
 import { issueSession } from '../sessions.js';
 import { createUser } from './auth.js';
 import { sameWorld } from '../demoPolicy.js';
+import { requestsFor } from '../dispatch.js';
+import { getLocation } from '../tracking/locations.js';
 import { view } from './bookings.js';
 import { transition, ACTIVE } from '../bookingState.js';
 import { str, email, phone, password, oneOf, int, wrap, bad, HttpError } from '../validate.js';
@@ -94,9 +96,9 @@ router.get('/drivers/requests', requireRole('driver'), wrap(async (req, res) => 
   const me = db.byId('users', req.user.id);
   if (me.driverStatus !== 'approved' || !me.online) return res.json({ requests: [], active: null });
   const active = db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status));
-  const passengerOf = (b) => db.byId('users', b.userId);
-  const requests = db.filter('bookings', (b) => b.status === 'requested' && sameWorld(me, passengerOf(b))).slice(-20).reverse();
-  res.json({ requests: requests.map((b) => view(b, req.user)), active: active ? view(active, req.user) : null });
+  // Nearest drivers first (Phase 6B-2): see src/dispatch.js.
+  const requests = await requestsFor(me, await getLocation(me.id));
+  res.json({ requests: requests.map(({ booking, km }) => ({ ...view(booking, req.user), pickupDistanceKm: km })), active: active ? view(active, req.user) : null });
 }));
 
 const NEXT = { accepted: 'arriving', arriving: 'in_progress', in_progress: 'completed' };
