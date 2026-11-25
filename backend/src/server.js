@@ -19,7 +19,7 @@ const { pruneSessions } = await import('./sessions.js');
 const { verifyAuditChain } = await import('./kyc.js');
 const { runBackup } = await import('./backup.js');
 const { purgeExpiredKyc } = await import('./routes/account.js');
-const { reconcile } = await import('./reconcile.js');
+const { reconcile, checkLedger } = await import('./reconcile.js');
 const { startLeaderElection, isLeader } = await import('./lock.js');
 
 await seedAdmin();
@@ -54,6 +54,7 @@ startLeaderElection((leading) => {
 });
 setTimeout(daily, 60_000).unref();
 setInterval(daily, 24 * 3_600_000).unref();
+setInterval(() => { if (isLeader() && db.usingPostgres()) checkLedger().catch((err) => securityEvent('ledger_check_failed', { error: err.message.slice(0, 160) }, 'high')); }, 3_600_000).unref();
 setInterval(() => { if (isLeader()) reconcile().catch((err) => securityEvent('reconciliation_failed', { error: err.message.slice(0, 160) }, 'high')); }, 60_000).unref();
 
 /* ---- graceful shutdown: stop taking traffic, let requests finish, flush writes ---- */

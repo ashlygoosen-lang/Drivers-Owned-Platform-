@@ -51,7 +51,8 @@ async function markPaid(bookingIn, tx) {
 
 router.post('/payments/bookings/:id/checkout', requireAuth, wrap(async (req, res) => {
   if (!paystack.paystackEnabled()) throw bad('Card payments are not available yet. Please choose cash.');
-  const booking = db.find('bookings', (b) => b.id === req.params.id && b.userId === req.user.id);
+  const found = await db.byIdFresh('bookings', req.params.id);
+  const booking = found?.userId === req.user.id ? found : undefined;
   if (!booking) throw new HttpError(404, 'Booking not found.');
   if (booking.paymentStatus === 'paid') throw bad('This booking is already paid.');
   if (booking.status !== 'awaiting_payment') throw bad('This booking does not need a card payment.');
@@ -67,7 +68,8 @@ router.post('/payments/bookings/:id/checkout', requireAuth, wrap(async (req, res
 
 router.get('/payments/verify/:reference', requireAuth, wrap(async (req, res) => {
   const ref = String(req.params.reference);
-  const booking = db.find('bookings', (b) => (b.pendingPaymentReference === ref || b.paymentReference === ref) && b.userId === req.user.id);
+  const found = (await db.faultIn('bookings', 'pendingPaymentReference', ref)) || (await db.faultIn('bookings', 'paymentReference', ref));
+  const booking = found?.userId === req.user.id ? found : undefined;
   if (!booking) throw new HttpError(404, 'Payment not found.');
   if (booking.paymentStatus === 'paid') return res.json({ booking, paid: true });
   const tx = await paystack.verify(ref);
@@ -86,7 +88,7 @@ export function paystackWebhook() {
       const event = JSON.parse(raw.toString('utf8'));
       if (event.event !== 'charge.success') return;
       const ref = event.data?.reference;
-      const booking = db.find('bookings', (b) => b.pendingPaymentReference === ref || b.paymentReference === ref);
+      const booking = (await db.faultIn('bookings', 'pendingPaymentReference', ref)) || (await db.faultIn('bookings', 'paymentReference', ref));
       if (booking) await markPaid(booking, event.data);
     } catch (err) { console.error('[drop] paystack webhook', err.message); }
   });
@@ -116,11 +118,11 @@ function walletRef(user) {
 const maskAcc = (n) => (n ? `•••• ${String(n).slice(-4)}` : '');
 const publicCard = (c) => c && ({ id: c.id, programme: c.programme, maskedNumber: c.maskedNumber, validDate: c.validDate, status: c.status, type: c.type, issuedAt: c.issuedAt, sandbox: c.sandbox, stopReason: c.stopReason || null });
 
-router.get('/wallet', driverOnly, (req, res) => {
+router.get('/wallet', driverOnly, wrap(async (req, res) => {
   const u = db.byId('users', req.user.id);
   const card = db.all('cards').filter((c) => c.userId === u.id && c.status !== 'retired').pop();
   const spendToday = db.filter('cardEvents', (e) => e.userId === u.id && e.method === 'Deduct' && e.approved && e.createdAt >= new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString()).reduce((s, e) => s + e.amount - (e.reversed || 0), 0);
-  const tx = statement(walletAccount(u.id), 100).map((t) => ({ ...t, amount: rands(t.amount) }));
+  const tx = (await statement(walletAccount(u.id), 100)).map((t) => ({ ...t, amount: rands(t.amount) }));
   const declined = db.filter('cardEvents', (e) => e.userId === u.id && e.method === 'Deduct' && e.approved === false).slice(-10).reverse()
     .map((e) => ({ id: e.id, merchant: e.merchant, amount: rands(e.amount), reason: declineText(e.resultCode), createdAt: e.createdAt }));
   res.json({
@@ -135,7 +137,7 @@ router.get('/wallet', driverOnly, (req, res) => {
     rules: { minWithdrawal: rands(WITHDRAWAL.min), withdrawalFee: rands(WITHDRAWAL.fee), cashDebtLimit: rands(WITHDRAWAL.cashDebtLimit) },
     banks: BANKS,
   });
-});
+}));
 
 router.put('/wallet/bank-account', driverOnly, wrap(async (req, res) => {
   const b = req.body || {};
@@ -297,20 +299,35 @@ router.post('/finance/withdrawals/:id/:action', finance, wrap(async (req, res) =
   res.json({ ok: true });
 }));
 
-router.get('/finance/ledger', finance, (req, res) => {
+router.get('/finance/ledger', finance, wrap(async (req, res) => {
   const account = req.query.account ? String(req.query.account) : 'pool';
-  res.json({ account, balance: rands(balance(account)), entries: statement(account, 300).map((e) => ({ ...e, amount: rands(e.amount) })) });
-});
+  res.json({ account, balance: rands(balance(account)), entries: (await statement(account, 300)).map((e) => ({ ...e, amount: rands(e.amount) })) });
+}));
 
-router.get('/finance/journal.csv', finance, (req, res) => {
-  audit(req.user, 'finance.journal_exported', 'ledger');
-  const lines = ['Date,Entry,Type,Memo,Account,Debit,Credit'];
+// Whole journal (or ?from=YYYY-MM-DD&to=YYYY-MM-DD), streamed in batches so a big ledger never sits in memory.
+router.get('/finance/journal.csv', finance, wrap(async (req, res) => {
+  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
+  const from = day(req.query.from) || '0000', to = day(req.query.to) ? `${day(req.query.to)}T99` : '9999';
+  audit(req.user, 'finance.journal_exported', 'ledger', { from, to });
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  for (const t of db.all('ledger')) for (const l of t.lines) lines.push([t.createdAt, t.id, t.type, t.memo, l.account, (l.dr / 100).toFixed(2), (l.cr / 100).toFixed(2)].map(esc).join(','));
+  const rows = (t) => t.lines.map((l) => [t.createdAt, t.id, t.type, t.memo, l.account, (l.dr / 100).toFixed(2), (l.cr / 100).toFixed(2)].map(esc).join(',')).join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="drop-journal-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.send(lines.join('\n'));
-});
+  res.write('Date,Entry,Type,Memo,Account,Debit,Credit');
+  if (!db.usingPostgres()) {
+    for (const t of db.all('ledger')) if (t.createdAt >= from && t.createdAt < to) res.write(`\n${rows(t)}`);
+    return res.end();
+  }
+  let after = ['', ''];
+  for (;;) {
+    const batch = await db.sql(`select id, data from drop_docs where collection = 'ledger' and not deleted and data->>'createdAt' >= $1 and data->>'createdAt' < $2
+      and (data->>'createdAt', id) > ($3, $4) order by data->>'createdAt', id limit 2000`, [from, to, after[0], after[1]]);
+    for (const r of batch) res.write(`\n${rows(r.data)}`);
+    if (batch.length < 2000) break;
+    after = [batch.at(-1).data.createdAt, batch.at(-1).id];
+  }
+  res.end();
+}));
 
 router.get('/finance/cards', finance, (_req, res) => {
   const names = Object.fromEntries(db.all('users').map((u) => [u.id, u.name]));

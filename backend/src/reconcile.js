@@ -40,3 +40,22 @@ export async function reconcile() {
   if (Object.values(fixed).some(Boolean)) securityEvent('reconciliation', Object.fromEntries(Object.entries(fixed).map(([k, v]) => [k, String(v)])));
   return { ...fixed, stuck: stuck.length, at: now() };
 }
+
+/**
+ * Ledger self-check (hourly on the leader): in-memory balances vs PostgreSQL's sum of every entry.
+ * Writes in flight can make one check differ for a moment, so a difference must show up in three
+ * checks in a row before it is reported; the last check then re-derives the totals from PostgreSQL.
+ */
+export async function checkLedger({ attempts = 3, gapMs = 5000 } = {}) {
+  const { verifyAgainstDatabase } = await import('./money/ledger.js');
+  const { catchUp } = await import('./db.js');
+  let diff = [];
+  for (let i = 0; i < attempts; i++) {
+    await catchUp();
+    diff = await verifyAgainstDatabase({ repair: i === attempts - 1 });
+    if (!diff.length) return [];
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, gapMs));
+  }
+  securityEvent('ledger_mismatch', { accounts: diff.slice(0, 5).map((d) => `${d.account}:${d.memory}/${d.database}`).join(','), count: String(diff.length) }, 'high');
+  return diff;
+}
