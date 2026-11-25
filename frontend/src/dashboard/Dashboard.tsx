@@ -54,6 +54,21 @@ function Trips({ onTrack, onBook, driver = false }: { onTrack: (b: Booking) => v
   ])} />;
 }
 
+/** Close the account (POPIA right to erasure; also required by the app stores). */
+function DeleteAccount({ notify }: { notify: Notify }) {
+  const { signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
+  return <details className="border-t border-[#e3e8ef] pt-3" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+    <summary className="cursor-pointer text-sm font-semibold text-red-800">Delete my account</summary>
+    <form className="mt-3 grid gap-3" onSubmit={async (e) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); try { await api('/auth/delete-account', { body: f }); signOut(); notify('Your DROP account has been deleted.'); } catch (err) { setError((err as Error).message); } }}>
+      <p className="text-[13px] leading-5 text-[#4d5b71]">This removes your name, contact details, saved places, bank account and devices, and signs you out everywhere. Trip and payment records are kept as tax law requires, and identity documents are kept only for the legally required period (5 years) and then erased. Drivers must withdraw their wallet balance first.</p>
+      <div className="grid gap-3 md:grid-cols-3"><input name="password" type="password" required placeholder="Your password" autoComplete="current-password" className={input} aria-label="Password" /><input name="confirm" required placeholder="Type DELETE" className={input} aria-label="Type DELETE to confirm" /><button className="rounded-xl bg-red-700 px-4 text-sm font-semibold text-white">Delete account</button></div>
+      <ErrorText>{error}</ErrorText>
+    </form>
+  </details>;
+}
+
 /** Two-step sign-in and "sign out everywhere". */
 function AccountSecurity({ notify }: { notify: Notify }) {
   const { user, setUser, signOut } = useAuth();
@@ -72,6 +87,7 @@ function AccountSecurity({ notify }: { notify: Notify }) {
       <input name="code" required inputMode="numeric" placeholder="6-digit code" className={input} aria-label="Authenticator code" />
       <button className={outline}>Turn off</button></form>}
     <ErrorText>{error}</ErrorText>
+    {!staff && <DeleteAccount notify={notify} />}
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e3e8ef] pt-3"><p className="text-sm">Lost a phone or signed in somewhere public?</p><button type="button" className={outline} onClick={async () => { try { await api('/auth/logout-all', { body: {} }); signOut(); notify('You’ve been signed out on all devices.'); } catch (err) { setError((err as Error).message); } }}>Sign out everywhere</button></div>
   </section>;
 }

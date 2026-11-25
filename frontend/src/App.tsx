@@ -5,7 +5,7 @@ import { COMPANY } from './lib/company';
 import { Icon, type IconName, button, outline, limeButton, darkOutline, input, BrandImage, Logo, Label, MapView } from './components/ui';
 import { Modal } from './components/Modal';
 import { BookingFlow, WHEN_OPTIONS, type TripDraft } from './modals/BookingFlow';
-import { AuthForm } from './modals/AuthForm';
+import { AuthForm, ResetPassword } from './modals/AuthForm';
 import { DemoPicker, useDemoAccounts } from './modals/DemoPicker';
 import { DriverApply } from './modals/DriverApply';
 import { InfoPanel } from './modals/InfoPanel';
@@ -26,7 +26,7 @@ const NAV = [['Services', 'services'], ['Driver Ownership', 'ownership'], ['How 
 
 type ModalState =
   | { kind: 'booking'; draft: TripDraft; existing?: Booking | null }
-  | { kind: 'auth' } | { kind: 'demo' } | { kind: 'driver' } | { kind: 'dashboard'; tab?: string } | { kind: 'info'; topic: string } | null;
+  | { kind: 'auth' } | { kind: 'reset'; token: string } | { kind: 'demo' } | { kind: 'driver' } | { kind: 'dashboard'; tab?: string } | { kind: 'info'; topic: string } | null;
 
 const howSteps: Record<string, [string, string][]> = {
   Passengers: [['Create your account', 'Set up your passenger profile in under a minute.'], ['Choose your ride', 'Enter your destination and see your upfront fare, with no passenger commission.'], ['Sit back. You’re on your way.', 'Follow your trip status, share it with someone you trust and enjoy the ride.']],
@@ -55,6 +55,11 @@ function Page() {
   useDropMotion();
 
   useEffect(() => { api<{ places: string[] }>('/places').then((r) => setPlaces(r.places)).catch(() => setPlaces(['Cape Town City Centre', 'V&A Waterfront', 'Cape Town International Airport', 'Sea Point Promenade'])); }, []);
+  // Password reset link from email.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('token');
+    if (window.location.pathname === '/reset-password' && t) { setModalTitle('Choose a new password'); setModal({ kind: 'reset', token: t }); }
+  }, []);
   // Back from Paystack checkout: confirm the payment with the server, then show the trip.
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('payment_ref');
@@ -265,6 +270,7 @@ function Page() {
 
     {modal && <Modal key={modal.kind} title={title} wide={modal.kind === 'booking' || modal.kind === 'dashboard'} onClose={close} eyebrow={modal.kind === 'dashboard' ? 'MY DROP' : undefined}>
       {modal.kind === 'booking' && <BookingFlow draft={modal.draft} existing={modal.existing} onTitle={setModalTitle} onNotice={setNotice} onClose={close} onVerify={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
+      {modal.kind === 'reset' && <ResetPassword token={modal.token} onDone={() => setModal({ kind: 'auth' })} />}
       {modal.kind === 'demo' && <DemoPicker onDone={() => setModal({ kind: 'dashboard' })} />}
       {modal.kind === 'auth' && <AuthForm showDemo onDone={(u) => setModal({ kind: 'dashboard', tab: ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
       {modal.kind === 'driver' && <DriverApply onDashboard={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
