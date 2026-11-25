@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireStepUp } from './auth.js';
 import express from 'express';
 import { db, id, now, nextRef, nextNumber } from '../db.js';
 import { requireAuth, requireRole, checkPassword } from '../auth.js';
@@ -306,7 +307,7 @@ router.get('/finance/withdrawals', finance, (req, res) => {
 });
 
 /** Bank payment file for requested withdrawals (contains full account numbers: finance only, audited). */
-router.get('/finance/withdrawals.csv', finance, (req, res) => {
+router.get('/finance/withdrawals.csv', finance, requireStepUp, (req, res) => {
   const rows = db.filter('withdrawals', (w) => w.status === 'requested');
   audit(req.user, 'finance.payment_file_exported', 'withdrawals', { count: rows.length });
   const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;

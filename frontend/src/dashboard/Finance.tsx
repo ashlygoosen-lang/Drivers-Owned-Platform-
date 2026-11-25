@@ -1,3 +1,4 @@
+import { useStepUp, downloadProtected } from '../lib/stepUp';
 import { useState } from 'react';
 import { api, date, money, token, type FinanceOverview, type Withdrawal } from '../lib/api';
 import { button, outline, input, ErrorText, Icon, StatusPill } from '../components/ui';
@@ -44,14 +45,16 @@ export function FinanceOverviewPanel({ notify }: { notify: Notify }) {
 export function Payouts({ notify }: { notify: Notify }) {
   const [status, setStatus] = useState('requested');
   const { data, reload } = useLoad<{ withdrawals: Withdrawal[] }>(`/finance/withdrawals?status=${status}`);
+  const stepUp = useStepUp();
   const act = async (w: Withdrawal, action: 'paid' | 'reject') => {
     const value = window.prompt(action === 'paid' ? `Bank payment reference for ${w.ref} (${money(w.amount)} to ${w.holder})` : `Reason for returning ${w.ref} to the driver's wallet`);
     if (!value) return;
     try { await api(`/finance/withdrawals/${w.id}/${action}`, { body: action === 'paid' ? { bankReference: value } : { reason: value } }); notify(action === 'paid' ? `${w.ref} marked paid.` : `${w.ref} returned to the wallet.`); void reload(); } catch (e) { notify((e as Error).message); }
   };
   return <div className="grid gap-4">
+    {stepUp.dialog}
     <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-2">{[['requested', 'To pay'], ['paid', 'Paid'], ['rejected', 'Returned']].map(([s, l]) => <button key={s} onClick={() => setStatus(s)} className={`min-h-10 rounded-xl px-4 text-sm font-semibold ${status === s ? 'bg-navy text-white' : 'bg-grey'}`}>{l}</button>)}</div>
-      {status === 'requested' && <button className={outline} onClick={() => download('/finance/withdrawals.csv', `drop-payouts-${new Date().toISOString().slice(0, 10)}.csv`).catch((e) => notify(e.message))}><Icon name="file" size={16} />Bank payment file (CSV)</button>}</div>
+      {status === 'requested' && <button className={outline} onClick={() => stepUp.guard(() => downloadProtected('/finance/withdrawals.csv', `drop-payouts-${new Date().toISOString().slice(0, 10)}.csv`)).catch((e) => notify(e.message))}><Icon name="file" size={16} />Bank payment file (CSV)</button>}</div>
     {status === 'requested' && <p className="text-[13px] text-[#5b6b82]">Download the payment file, load it in the pool account’s banking platform, then mark each withdrawal paid with the bank reference. The file contains full account numbers; every download is logged.</p>}
     {!data ? <Loading /> : !data.withdrawals.length ? <Empty>Nothing here.</Empty> : <Table head={['Ref', 'Driver', 'Amount', 'To', 'Requested', '']} rows={data.withdrawals.map((w) => [w.ref, w.driver, <b key="a">{money(w.amount)}</b>, `${w.holder} · ${w.bank} ${w.masked}`, date(w.createdAt),
       w.status === 'requested' ? <span key="x" className="flex gap-2"><button className={`${button} min-h-9 px-4`} onClick={() => act(w, 'paid')}>Mark paid</button><button className="text-[13px] underline" onClick={() => act(w, 'reject')}>Return</button></span> : <span key="x" className="text-[13px]"><StatusPill status={w.status} />{w.bankReference && ` ${w.bankReference}`}{w.reason && ` ${w.reason}`}</span>])} />}

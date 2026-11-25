@@ -161,3 +161,20 @@ test('SEC-005: malformed uploads are rejected without crashing the server', asyn
   assert.ok(bad.status >= 400 && bad.status < 500);
   assert.equal((await call('GET', '/health')).status, 200, 'server still up');
 });
+
+test('SEC-023: exports with decrypted bank or passport numbers need a fresh authenticator code', async () => {
+  const t = await adminToken();
+  const csv = await fetch(`${base}/finance/withdrawals.csv`, { headers: { authorization: `Bearer ${t}` } });
+  assert.equal(csv.status, 403);
+  assert.equal((await csv.json()).code, 'step_up_required');
+  assert.equal((await call('POST', '/auth/step-up', { token: t, body: { code: '000000' } })).status, 400);
+  const u = db.find('users', (x) => x.email === 'admin@drop.test');
+  const { decryptText } = await import('../src/kyc.js');
+  const secret = decryptText(u.mfa.secretEnc);
+  u.mfa.lastStep = -1; // test only: the sign-in above used this 30-second window
+  const ok = await call('POST', '/auth/step-up', { token: t, body: { code: totp(secret) } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  const again = await fetch(`${base}/finance/withdrawals.csv`, { headers: { authorization: `Bearer ${t}` } });
+  assert.equal(again.status, 200);
+  assert.ok(db.all('audit').some((a) => a.action === 'step_up' && a.subjectId === u.id));
+});

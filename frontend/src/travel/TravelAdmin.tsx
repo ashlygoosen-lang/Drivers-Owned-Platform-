@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { api, money, date, token, BASE, openProtectedFile } from '../lib/api';
+import { api, money, date } from '../lib/api';
+import { useStepUp, downloadProtected, printProtected } from '../lib/stepUp';
 import { button, outline, input, Field, ErrorText, Icon, Spinner, StatusPill } from '../components/ui';
 import { useLoad, Loading, Empty, Table, type Notify } from '../dashboard/common';
 import { FillBar, GROUP_STATUS, BOOKING_STATUS, prettyDate, type GroupView, type GroupBooking } from './GroupTravel';
@@ -16,13 +17,6 @@ type StaffBooking = GroupBooking & { customer: { name: string; email: string; ph
 const Kpi = ({ label, value, tone = '' }: { label: string; value: string | number; tone?: string }) => <div className={`rounded-xl border border-[#e3e8ef] p-4 ${tone}`}><p className="text-[12px] text-[#505d71]">{label}</p><p className="whitespace-nowrap font-display text-xl font-extrabold">{value}</p></div>;
 const SUB = ['Groups', 'Partners', 'Routes', 'Reports', 'Demand'] as const;
 
-async function download(path: string, filename: string) {
-  const res = await fetch(BASE + path, { headers: { authorization: `Bearer ${token.get()}` } });
-  if (!res.ok) throw new Error('Could not download the manifest.');
-  const url = URL.createObjectURL(await res.blob());
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  a.click(); setTimeout(() => URL.revokeObjectURL(url), 30_000);
-}
 
 export function TravelAdmin({ notify, role }: { notify: Notify; role: string }) {
   const [sub, setSub] = useState<(typeof SUB)[number]>('Groups');
@@ -100,6 +94,7 @@ function GroupFile({ id, notify, canWrite, canOps, onBack }: { id: string; notif
   const [payout, setPayout] = useState({ amount: '', kind: 'balance', reference: '' });
   const [tickets, setTickets] = useState<Record<string, { ticketNumber: string; seat: string }>>({});
   const [cancel, setCancel] = useState({ open: false, reason: '', policy: '' });
+  const stepUp = useStepUp();
   if (!data) return <Loading />;
   const g = data.group; const m = data.money;
   const run = async (k: string, fn: () => Promise<unknown>, msg: string) => { setBusy(k); setError(''); try { await fn(); notify(msg); await reload(); } catch (e) { setError((e as Error).message); } finally { setBusy(''); } };
@@ -110,6 +105,7 @@ function GroupFile({ id, notify, canWrite, canOps, onBack }: { id: string; notif
   return <div className="grid gap-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-[#505d71]">{g.ref} · {g.typeLabel} · {data.partner?.name}</p><h4 className="font-display text-xl font-extrabold">{g.originName} ({g.origin}) → {g.destinationName} ({g.destination})</h4><p className="text-sm">{prettyDate(g.departureDate)}{g.returnDate && ` – ${prettyDate(g.returnDate)}`} · fill deadline {date(g.deadline)}</p></div>
       <div className="flex items-center gap-3"><StatusPill status={GROUP_STATUS[g.status] || g.status} /><button className={outline} onClick={onBack}>All groups</button></div></div>
+    {stepUp.dialog}
     <FillBar paid={g.paidSeats} capacity={g.capacity} minimum={g.minimum} />
     <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6"><Kpi label="Held in escrow" value={money(m.heldInEscrow)} /><Kpi label="Collected (net)" value={money(m.collected)} /><Kpi label="Partner cost" value={money(m.partnerCost)} /><Kpi label={m.profitFinal ? 'Profit' : 'Expected profit'} value={money(m.profit)} /><Kpi label="Paid to partner" value={money(m.paidToPartner)} /><Kpi label="Fees" value={money(m.fees)} /></div>
     <p className="text-sm text-[#505d71]">Price {money(g.pricePerPerson)} per person · bulk rate {money(g.bulkRate)} · deposit {g.depositPct}% · if it doesn’t fill: {g.failurePolicy === 'transfer' ? 'offer another date' : 'refund'}{g.partnerReference && <> · partner reference <b className="text-navy">{g.partnerReference}</b></>}</p>
@@ -120,9 +116,9 @@ function GroupFile({ id, notify, canWrite, canOps, onBack }: { id: string; notif
       <div className="flex flex-wrap gap-3"><input className={`${input} max-w-xs`} aria-label="Partner booking reference" placeholder="Partner booking reference / PNR" value={partnerRef} onChange={(e) => setPartnerRef(e.target.value)} />
         <button className={button} disabled={!!busy || !partnerRef.trim()} onClick={() => run('c', () => api(`/admin/travel/groups/${g.id}/confirm`, { body: { partnerReference: partnerRef } }), 'Group confirmed with the partner.')}>{busy === 'c' && <Spinner />}Confirm group</button></div></section>}
 
-    {canOps && <section className="flex flex-wrap items-center gap-3 rounded-xl border border-[#e3e8ef] p-4"><p className="mr-auto text-sm"><b>Passenger manifest</b><span className="block text-[12px] text-[#505d71]">Contains decrypted passport numbers. Every download is logged. Share only with this partner.</span></p>
-      <button className={outline} onClick={() => run('csv', () => download(`/admin/travel/groups/${g.id}/manifest.csv`, `${g.ref}-manifest.csv`), 'Manifest downloaded.')}><Icon name="file" size={17} />CSV</button>
-      <button className={outline} onClick={() => run('pdf', () => openProtectedFile(`/admin/travel/groups/${g.id}/manifest.html`), 'Manifest opened for printing.')}><Icon name="file" size={17} />Print / PDF</button></section>}
+    {canOps && <section className="flex flex-wrap items-center gap-3 rounded-xl border border-[#e3e8ef] p-4"><p className="mr-auto text-sm"><b>Passenger manifest</b><span className="block text-[12px] text-[#505d71]">Contains full passport numbers, so you’ll be asked for an authenticator code. Every download is logged. Share only with this partner.</span></p>
+      <button className={outline} onClick={() => { setError(''); stepUp.guard(() => downloadProtected(`/admin/travel/groups/${g.id}/manifest.csv`, `${g.ref}-manifest.csv`)).then((now) => now && notify('Manifest downloaded.')).catch((e) => setError((e as Error).message)); }}><Icon name="file" size={17} />CSV</button>
+      <button className={outline} onClick={() => { setError(''); stepUp.guard(() => printProtected(`/admin/travel/groups/${g.id}/manifest.html`)).then((now) => now && notify('Manifest opened for printing.')).catch((e) => setError((e as Error).message)); }}><Icon name="file" size={17} />Print / PDF</button></section>}
 
     {canWrite && <section className="grid gap-3 rounded-xl border border-[#e3e8ef] p-4"><p className="font-semibold">Payments to partner</p>
       <p className="text-sm">Owed to {data.partner?.name} across all groups: <b>{money(data.partnerOwed)}</b></p>

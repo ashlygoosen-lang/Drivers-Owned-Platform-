@@ -7,6 +7,7 @@ import { encryptText, decryptText, audit } from '../kyc.js';
 import { issueSession, refresh, endSession } from '../sessions.js';
 import { securityEvent, countOnly } from '../monitor.js';
 import crypto from 'node:crypto';
+import * as kv from '../kv.js';
 const hashIp = (ip) => crypto.createHash('sha256').update(`drop-ip:${ip || ''}`).digest('hex').slice(0, 12);
 import { str, email, phone, password, oneOf, wrap, bad, HttpError } from '../validate.js';
 import { demoEnabled, DEMO_ACCOUNTS, isDemoUser, seedDemoTrip, demoRoleAllowed } from '../demo.js';
@@ -202,6 +203,32 @@ router.post('/mfa/disable', requireAuth, wrap(async (req, res) => {
   audit(req.user, 'mfa_disabled', req.user.id, {});
   res.json({ user: publicUser(db.byId('users', req.user.id)) });
 }));
+
+/**
+ * Step-up (SEC-023): exports that contain decrypted bank or passport numbers need a fresh two-step code,
+ * not just a signed-in session. A correct code unlocks those exports for 5 minutes, for this user only.
+ */
+const STEP_UP_SECONDS = 300;
+router.post('/step-up', requireAuth, wrap(async (req, res) => {
+  if (!req.user.mfa?.enabledAt) throw bad('Turn on two-step sign-in first.');
+  const how = await checkCode(req.user, req.body || {});
+  await kv.set(`stepup:${req.user.id}`, String(Date.now()), STEP_UP_SECONDS);
+  audit(req.user, 'step_up', req.user.id, { method: how });
+  res.json({ ok: true, validForSeconds: STEP_UP_SECONDS });
+}));
+
+/** Use after requireAuth/requireRole on routes that release decrypted sensitive data. */
+export function requireStepUp(req, _res, next) {
+  // Without two-step sign-in there is nothing to step up with; staff can only be in that state when
+  // STAFF_MFA=off (local development), because production refuses staff sessions without it.
+  if (!req.user?.mfa?.enabledAt) return next();
+  kv.get(`stepup:${req.user.id}`).then((v) => {
+    if (v) return next();
+    const err = new HttpError(403, 'Enter a code from your authenticator app to download this file.');
+    err.code = 'step_up_required';
+    next(err);
+  }, next);
+}
 
 /** Sign out on every device (ends all sessions, including this one). */
 router.post('/logout-all', requireAuth, wrap(async (req, res) => {
