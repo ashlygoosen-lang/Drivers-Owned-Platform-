@@ -232,3 +232,57 @@ test('staff transport: business account, invoiced, cancellation takes effect aft
   assert.ok(db.byId('plans', plan.id).closedAt);
   assert.equal(db.byId('plans', plan.id).refundedAmount, undefined);
 });
+
+test('dashboards and operations: KPIs, next pickup, statement, risk list, vetted reassignment, cancel on behalf', async () => {
+  const admin = (await call('POST', '/auth/login', { body: { email: 'admin@drop.test', password: 'AdminPass123' } })).data.token;
+  const parent = (await call('POST', '/auth/login', { body: { email: 'parent@example.com', password: 'Passw0rd!' } })).data;
+  const plain = (await call('POST', '/auth/login', { body: { email: 'plain@example.com', password: 'Driver123' } })).data;
+  const other = (await call('POST', '/auth/login', { body: { email: 'other@example.com', password: 'Driver123' } })).data;
+
+  let plan = (await call('POST', '/plans', { token: parent.token, body: scholarBody({ outTime: '07:10', returnTime: '15:00' }) })).data.plan;
+  const co = (await call('POST', `/payments/plans/${plan.id}/checkout`, { token: parent.token, body: {} })).data;
+  await call('GET', `/payments/verify/${co.reference}`, { token: parent.token });
+
+  // Parent dashboard
+  let dash = (await call('GET', '/plans/dashboard', { token: parent.token })).data;
+  assert.equal(dash.kind, 'scholar');
+  assert.ok(dash.kpis.awaitingDriver >= 1);
+  const mine = dash.plans.find((p) => p.id === plan.id);
+  assert.equal(mine.stats.tripsPlanned, mine.pricing.trips);
+  assert.equal(mine.stats.next.date, mine.pricing.dates[0]);
+  assert.equal(mine.stats.next.time, '07:10');
+  assert.ok(Array.isArray(mine.stats.holidays));
+  assert.equal(dash.nextUp.time >= '06:45', true);
+  assert.equal((await call('GET', '/plans/dashboard', { token: other.token })).data.plans.length, 0, 'only your own plans');
+
+  // Operations console: KPIs, search, candidates are vetted and clash-free
+  const ops = (await call('GET', `/admin/plans?q=${plan.ref}`, { token: admin })).data;
+  assert.deepEqual(ops.plans.map((p) => p.id), [plan.id]);
+  assert.ok(ops.kpis.awaitingDriver >= 1);
+  assert.ok(ops.kpis.escrowHeld >= plan.pricing.total);
+  const cands = (await call('GET', `/admin/plans/${plan.id}/candidates`, { token: admin })).data.candidates;
+  assert.ok(cands.some((c) => c.id === other.user.id));
+  assert.equal(cands.some((c) => c.id === plain.user.id), false, 'unvetted drivers are never offered for scholar plans');
+  assert.equal((await call('POST', `/admin/plans/${plan.id}/assign`, { token: admin, body: { driverId: plain.user.id, reason: 'try' } })).status, 400);
+  assert.equal((await call('POST', `/admin/plans/${plan.id}/assign`, { token: admin, body: { driverId: other.user.id, reason: 'Matched by ops' } })).status, 200);
+  assert.ok(db.all('audit').some((a) => a.action === 'plan.driver_assigned'));
+  assert.ok(db.all('notifications').some((n) => n.userId === other.user.id && /assigned plan/.test(n.title)));
+  dash = (await call('GET', '/plans/dashboard', { token: parent.token })).data;
+  assert.equal(dash.plans.find((p) => p.id === plan.id).status, 'active');
+  assert.equal(dash.plans.find((p) => p.id === plan.id).driver.name, 'Dee Driver');
+
+  // Statement CSV
+  const csv = await fetch(`${base}/plans/${plan.id}/statement.csv`, { headers: { authorization: `Bearer ${parent.token}` } });
+  assert.equal(csv.status, 200);
+  assert.match(await csv.text(), /^"Plan","Date","Trip","Booking","Status"/);
+  assert.equal((await fetch(`${base}/plans/${plan.id}/statement.csv`, { headers: { authorization: `Bearer ${other.token}` } })).status, 404);
+  const detail = (await call('GET', `/admin/plans/${plan.id}`, { token: admin })).data;
+  assert.equal(detail.owner.email, 'parent@example.com');
+  assert.equal((await call('GET', `/admin/plans/${plan.id}`, { token: parent.token })).status, 403);
+
+  // Cancel on the customer's behalf (immediate, admin only)
+  plan = (await call('POST', `/admin/plans/${plan.id}/cancel`, { token: admin, body: { reason: 'Family moved, phoned in', immediate: true } })).data.plan;
+  assert.equal(plan.status, 'cancelled');
+  assert.ok(Date.parse(plan.cancelEffective) <= Date.now());
+  assert.ok(db.all('notifications').some((n) => n.userId === parent.user.id && /cancelled/.test(n.title)));
+});

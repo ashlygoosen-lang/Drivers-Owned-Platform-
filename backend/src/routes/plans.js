@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db, id, now, nextRef } from '../db.js';
 import { requireAuth, requireRole } from '../auth.js';
 import { str, oneOf, wrap, bad, HttpError } from '../validate.js';
-import { notify } from '../kyc.js';
+import { notify, audit } from '../kyc.js';
 import { securityEvent } from '../monitor.js';
 import { verificationGate } from './bookings.js';
 import { getLocation } from '../tracking/locations.js';
@@ -10,7 +10,7 @@ import * as paystack from '../money/paystack.js';
 import { cents } from '../money/ledger.js';
 import {
   KINDS, MAX_RIDERS, SKIP_NOTICE_HOURS, CANCEL_NOTICE_HOURS, pricePlan, planView, addHistory, scholarEligibility, clashes,
-  sastDate, sastTime,
+  sastDate, sastTime, publicHolidays,
 } from '../plans.js';
 import { locate, distanceKm } from '../tracking/geo.js';
 
@@ -119,13 +119,6 @@ function ownPlan(req) {
   return p;
 }
 
-router.get('/plans/:id', requireAuth, (req, res) => {
-  const p = db.byId('plans', String(req.params.id));
-  if (!p || ![p.userId, p.driverId].includes(req.user.id) && !['admin', 'support', 'compliance', 'finance'].includes(req.user.role)) throw new HttpError(404, 'Plan not found.');
-  const trips = db.filter('bookings', (b) => b.planId === p.id).sort((a, b) => String(a.scheduledFor).localeCompare(String(b.scheduledFor)))
-    .map((b) => ({ id: b.id, ref: b.ref, date: b.planDate, leg: b.planLeg, status: b.status, scheduledFor: b.scheduledFor, fare: b.fare }));
-  res.json({ plan: planView(p, req.user), trips });
-});
 
 /** Skip a day (absence, school holiday). With enough notice the day is refunded at month end. */
 router.post('/plans/:id/skip', requireAuth, wrap(async (req, res) => {
@@ -168,6 +161,119 @@ router.post('/plans/:id/auto-renew', requireAuth, wrap(async (req, res) => {
   const updated = db.update('plans', p.id, { autoRenew: Boolean(req.body?.autoRenew) });
   res.json({ plan: planView(updated, req.user) });
 }));
+
+/* ---------------- Dashboards ---------------- */
+const ACTIVE_TRIP = ['requested', 'accepted', 'arriving', 'in_progress'];
+const ON_TIME_MIN = 10;
+const startedAt = (b) => b.history?.find((h) => h.status === 'in_progress')?.at;
+const r2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * Everything a dashboard shows about one plan: trips by day and leg (for the calendar), what has been
+ * driven and spent, punctuality (pickup started within 10 minutes of the planned time), and the next trip.
+ */
+export function planStats(p, nowMs = Date.now()) {
+  const trips = db.filter('bookings', (b) => b.planId === p.id);
+  const byDate = {};
+  for (const t of trips) (byDate[t.planDate] ||= {})[t.planLeg] = { id: t.id, ref: t.ref, status: t.status, driverId: t.driverId || null, startedAt: startedAt(t) || null };
+  const driven = trips.filter((t) => t.status === 'completed');
+  const timed = driven.filter((t) => startedAt(t) && t.scheduledFor);
+  const onTime = timed.filter((t) => Date.parse(startedAt(t)) <= Date.parse(t.scheduledFor) + ON_TIME_MIN * 60_000).length;
+  const cutoff = p.cancelEffective ? Date.parse(p.cancelEffective) : Infinity;
+  const planned = p.pricing.dates.filter((d) => !(p.skipDates || []).includes(d));
+  let next = null;
+  if (['active', 'awaiting_driver'].includes(p.status) || (p.status === 'cancelled' && cutoff > nowMs)) {
+    for (const d of planned) {
+      for (const l of p.legs) {
+        const dep = sastTime(d, l.time);
+        const done = byDate[d]?.[l.key] && !ACTIVE_TRIP.includes(byDate[d][l.key].status);
+        if (dep + 20 * 60_000 > nowMs && dep < cutoff && !done) { next = { date: d, time: l.time, leg: l.key, label: l.label, departure: new Date(dep).toISOString(), bookingId: byDate[d]?.[l.key]?.id || null }; break; }
+      }
+      if (next) break;
+    }
+  }
+  const [y, m] = p.startDate.split('-').map(Number);
+  const holidays = [...publicHolidays(y)].filter((h) => h.startsWith(`${y}-${String(m).padStart(2, '0')}`)).sort();
+  const tripsPlanned = planned.filter((d) => sastTime(d, p.legs[0].time) < cutoff).length * p.legs.length;
+  return {
+    byDate, holidays, next,
+    tripsPlanned, tripsDriven: driven.length, tripsMissed: trips.filter((t) => t.status === 'cancelled').length,
+    spent: r2(driven.reduce((s2, t) => s2 + t.fare, 0)),
+    onTimeRate: timed.length ? Math.round((onTime / timed.length) * 100) : null,
+  };
+}
+
+/** Owner dashboard: KPIs, today's trips (with live status), and every plan with its stats. */
+router.get('/plans/dashboard', requireAuth, (req, res) => {
+  const kind = req.user.role === 'business' ? 'staff' : 'scholar';
+  const plans = db.filter('plans', (p) => p.userId === req.user.id && p.kind === kind).sort((a, b) => b.startDate.localeCompare(a.startDate) || b.createdAt.localeCompare(a.createdAt));
+  const today = sastDate();
+  const month = today.slice(0, 7);
+  const withStats = plans.map((p) => ({ ...planView(p, req.user), stats: planStats(p) }));
+  const live = withStats.filter((p) => ['active', 'awaiting_driver', 'awaiting_payment'].includes(p.status));
+  const todayTrips = [];
+  for (const p of withStats) {
+    if (!p.pricing.dates.includes(today) || p.skipDates.includes(today) || !['active', 'awaiting_driver', 'cancelled'].includes(p.status)) continue;
+    for (const l of p.legs) {
+      const dep = sastTime(today, l.time);
+      if (p.cancelEffective && dep >= Date.parse(p.cancelEffective)) continue;
+      const t = p.stats.byDate[today]?.[l.key];
+      const b = t ? db.byId('bookings', t.id) : null;
+      const driver = b?.driverId ? db.byId('users', b.driverId) : null;
+      todayTrips.push({ planId: p.id, planRef: p.ref, title: p.kind === 'scholar' ? p.school : p.destination, time: l.time, label: l.label, from: l.from, to: l.to,
+        riders: (p.riders || []).map((r) => r.name), status: t?.status || 'scheduled', bookingId: t?.id || null,
+        driver: driver ? { name: driver.name, vehicle: driver.vehicle || '' } : p.driver, departure: new Date(dep).toISOString() });
+    }
+  }
+  todayTrips.sort((a, b) => a.departure.localeCompare(b.departure));
+  const thisMonth = withStats.filter((p) => p.month === month);
+  const timedRates = withStats.filter((p) => p.stats.onTimeRate != null);
+  const nextUp = live.map((p) => p.stats.next && { ...p.stats.next, planId: p.id, planRef: p.ref, title: p.kind === 'scholar' ? p.school : p.destination, riders: (p.riders || []).map((r) => r.name), driver: p.driver })
+    .filter(Boolean).sort((a, b) => a.departure.localeCompare(b.departure))[0] || null;
+  res.json({
+    kind, today,
+    kpis: {
+      activePlans: live.filter((p) => p.status === 'active').length,
+      awaitingDriver: live.filter((p) => p.status === 'awaiting_driver').length,
+      awaitingPayment: live.filter((p) => p.status === 'awaiting_payment').length,
+      riders: new Set(live.flatMap((p) => (p.riders || []).map((r) => r.name.toLowerCase()))).size,
+      tripsDrivenThisMonth: thisMonth.reduce((s2, p) => s2 + p.stats.tripsDriven, 0),
+      tripsPlannedThisMonth: thisMonth.reduce((s2, p) => s2 + p.stats.tripsPlanned, 0),
+      spentThisMonth: r2(thisMonth.reduce((s2, p) => s2 + p.stats.spent, 0)),
+      committedThisMonth: r2(thisMonth.filter((p) => p.paymentStatus !== 'pending').reduce((s2, p) => s2 + p.pricing.total, 0)),
+      refunded: r2(withStats.reduce((s2, p) => s2 + (p.refundedAmount || 0), 0)),
+      onTimeRate: timedRates.length ? Math.round(timedRates.reduce((s2, p) => s2 + p.stats.onTimeRate * p.stats.tripsDriven, 0) / Math.max(1, timedRates.reduce((s2, p) => s2 + p.stats.tripsDriven, 0))) : null,
+    },
+    nextUp, todayTrips, plans: withStats,
+  });
+});
+
+router.get('/plans/:id', requireAuth, (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p || ![p.userId, p.driverId].includes(req.user.id) && !['admin', 'support', 'compliance', 'finance'].includes(req.user.role)) throw new HttpError(404, 'Plan not found.');
+  const trips = db.filter('bookings', (b) => b.planId === p.id).sort((a, b) => String(a.scheduledFor).localeCompare(String(b.scheduledFor)))
+    .map((b) => ({ id: b.id, ref: b.ref, date: b.planDate, leg: b.planLeg, status: b.status, scheduledFor: b.scheduledFor, fare: b.fare }));
+  res.json({ plan: planView(p, req.user), trips });
+});
+
+/** A plan's statement (every trip with status and fare) as CSV, for records or the accounts department. */
+router.get('/plans/:id/statement.csv', requireAuth, (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p || (p.userId !== req.user.id && !['admin', 'support', 'finance'].includes(req.user.role))) throw new HttpError(404, 'Plan not found.');
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const trips = db.filter('bookings', (b) => b.planId === p.id).sort((a, b) => String(a.scheduledFor).localeCompare(String(b.scheduledFor)));
+  const lines = [['Plan', 'Date', 'Trip', 'Booking', 'Status', 'Driver', 'Planned pickup', 'Pickup started', 'Fare (R)'].map(esc).join(',')];
+  for (const t of trips) {
+    const d = t.driverId ? db.byId('users', t.driverId) : null;
+    lines.push([p.ref, t.planDate, p.legs.find((l) => l.key === t.planLeg)?.label, t.ref, t.status, d?.name || '', t.scheduledFor, startedAt(t) || '', t.status === 'completed' ? t.fare.toFixed(2) : '0.00'].map(esc).join(','));
+  }
+  const used = trips.filter((t) => t.status === 'completed').reduce((s2, t) => s2 + t.fare, 0);
+  lines.push('', [p.ref, 'Totals', `${trips.filter((t) => t.status === 'completed').length} trips driven`, '', '', '', '', 'Paid / invoiced', used.toFixed(2)].map(esc).join(','));
+  if (p.paymentStatus !== 'invoice') lines.push([p.ref, '', '', '', '', '', '', 'Paid in advance', p.pricing.total.toFixed(2)].map(esc).join(','), [p.ref, '', '', '', '', '', '', 'Refunded', (p.refundedAmount || 0).toFixed(2)].map(esc).join(','));
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${p.ref}-statement.csv"`);
+  res.send(lines.join('\n'));
+});
 
 /* ---------------- Card payment for a plan (Paystack) ---------------- */
 router.post('/payments/plans/:id/checkout', requireAuth, wrap(async (req, res) => {
@@ -245,11 +351,103 @@ export function notifyDriversOfPlan(p) {
   }
 }
 
-/* ---------------- Staff view ---------------- */
-router.get('/admin/plans', requireRole('admin', 'support', 'finance'), (req, res) => {
+/* ---------------- Operations console (DROP staff) ---------------- */
+const opsRead = requireRole('admin', 'support', 'finance');
+const opsWrite = requireRole('admin', 'support');
+
+router.get('/admin/plans', opsRead, (req, res) => {
   const status = req.query.status ? String(req.query.status) : null;
-  const list = db.filter('plans', (p) => !status || p.status === status).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 300);
-  res.json({ plans: list.map((p) => planView(p, req.user)) });
+  const kind = req.query.kind ? String(req.query.kind) : null;
+  const q = String(req.query.q || '').toLowerCase().trim();
+  const today = sastDate();
+  const soon = sastDate(Date.now() + 7 * 86_400_000);
+  const all = db.filter('plans', () => true);
+  const list = all.filter((p) => (!status || p.status === status) && (!kind || p.kind === kind)
+    && (!q || [p.ref, p.school, p.destination, p.pickup, db.byId('users', p.userId)?.name, db.byId('users', p.driverId || '')?.name].join(' ').toLowerCase().includes(q)))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 300);
+  const risks = all.filter((p) => !p.closedAt && (
+    (p.status === 'awaiting_driver' && p.startDate <= soon)
+    || (p.refundFailures || 0) > 0
+    || (p.status === 'awaiting_payment' && p.renewedFromId && p.startDate <= soon)));
+  res.json({
+    kpis: {
+      active: all.filter((p) => p.status === 'active').length,
+      awaitingDriver: all.filter((p) => p.status === 'awaiting_driver').length,
+      awaitingPayment: all.filter((p) => p.status === 'awaiting_payment').length,
+      scholar: all.filter((p) => p.kind === 'scholar' && ['active', 'awaiting_driver'].includes(p.status)).length,
+      staff: all.filter((p) => p.kind === 'staff' && ['active', 'awaiting_driver'].includes(p.status)).length,
+      tripsToday: db.filter('bookings', (b) => b.planId && b.planDate === today).length,
+      escrowHeld: r2(all.filter((p) => p.paymentStatus === 'paid' && !p.closedAt).reduce((s2, p) => s2 + p.pricing.total - planStats(p).spent, 0)),
+      refundsFailing: all.filter((p) => (p.refundFailures || 0) > 0 && !p.closedAt).length,
+    },
+    risks: risks.map((p) => ({ id: p.id, ref: p.ref, kind: p.kind, status: p.status, startDate: p.startDate,
+      reason: (p.refundFailures || 0) > 0 ? `Refund failing (${p.refundFailures} attempts): ${p.refundError || ''}` : p.status === 'awaiting_driver' ? `No driver, starts ${p.startDate}` : `Renewal not paid, starts ${p.startDate}` })),
+    plans: list.map((p) => ({ ...planView(p, req.user), stats: (({ byDate, ...rest }) => rest)(planStats(p)) })),
+  });
 });
+
+router.get('/admin/plans/:id', opsRead, (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p) throw new HttpError(404, 'Plan not found.');
+  const owner = db.byId('users', p.userId);
+  const trips = db.filter('bookings', (b) => b.planId === p.id).sort((a, b) => String(b.scheduledFor).localeCompare(String(a.scheduledFor)))
+    .map((b) => ({ id: b.id, ref: b.ref, date: b.planDate, leg: b.planLeg, status: b.status, fare: b.fare, driver: b.driverId ? db.byId('users', b.driverId)?.name : null, scheduledFor: b.scheduledFor, startedAt: startedAt(b) || null }));
+  res.json({
+    plan: { ...planView(p, req.user), stats: planStats(p), usedAmount: p.usedAmount ?? null, refundError: p.refundError || null, refundFailures: p.refundFailures || 0, closedAt: p.closedAt || null, cancelReason: p.cancelReason || '' },
+    owner: owner ? { id: owner.id, name: owner.name, email: owner.email, phone: owner.phone, company: owner.company || '' } : null,
+    trips,
+  });
+});
+
+/** Drivers who could take this plan: eligible (vetted for scholar plans), no clash, nearest first. */
+router.get('/admin/plans/:id/candidates', opsWrite, wrap(async (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p) throw new HttpError(404, 'Plan not found.');
+  const out = [];
+  for (const d of db.filter('users', (u) => u.role === 'driver' && u.driverStatus === 'approved' && u.id !== p.driverId)) {
+    if (p.kind === 'scholar' && !scholarEligibility(d.id).eligible) continue;
+    const mine = db.filter('plans', (x) => x.driverId === d.id && ['active', 'awaiting_payment'].includes(x.status));
+    if (mine.some((m) => clashes(m, p))) continue;
+    const loc = await getLocation(d.id);
+    out.push({ id: d.id, name: d.name, vehicle: d.vehicle || '', rating: d.rating || null, online: Boolean(d.online), plans: mine.length,
+      distanceKm: loc && p.pickupLoc ? Math.round(distanceKm(loc, p.pickupLoc) * 10) / 10 : null });
+  }
+  out.sort((a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9));
+  res.json({ candidates: out.slice(0, 50) });
+}));
+
+/** Assign or reassign the plan's driver (same rules as a driver accepting it). */
+router.post('/admin/plans/:id/assign', opsWrite, wrap(async (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p || !['awaiting_driver', 'active', 'awaiting_payment'].includes(p.status)) throw new HttpError(404, 'This plan is not open.');
+  const d = db.byId('users', String(req.body?.driverId || ''));
+  if (!d || d.role !== 'driver' || d.driverStatus !== 'approved') throw bad('Choose an approved driver.');
+  if (p.kind === 'scholar') { const e = scholarEligibility(d.id); if (!e.eligible) throw bad(`This driver is not vetted for scholar transport (missing: ${e.missing.join(', ').replace(/_/g, ' ')}).`); }
+  if (db.filter('plans', (x) => x.driverId === d.id && x.id !== p.id && ['active', 'awaiting_payment'].includes(x.status)).some((m) => clashes(m, p))) throw bad('That driver already has a plan at these times.');
+  const reason = str(req.body?.reason, 'Reason', { min: 3, max: 200 });
+  const previous = p.driverId;
+  const status = p.status === 'awaiting_payment' ? 'awaiting_payment' : 'active';
+  const updated = await db.updateStrict('plans', p.id, { driverId: d.id, acceptedAt: now(), status, history: addHistory(p, status, `Driver assigned by ${req.user.name}: ${d.name} (${reason})`) }, { when: { driverId: previous ?? null } });
+  if (!updated) throw new HttpError(409, 'The plan just changed. Please refresh.');
+  audit(req.user, 'plan.driver_assigned', p.id, { plan: p.ref, driver: d.id, previous: previous || '', reason });
+  notify(d.id, `You’ve been assigned plan ${p.ref}`, `${KINDS[p.kind]} from ${p.startDate}: ${p.legs.map((l) => l.time).join(' & ')}, ${p.days.length} days a week. Open Monthly plans for details.`, 'plans');
+  if (previous && previous !== d.id) notify(previous, `Plan ${p.ref} reassigned`, 'Operations moved this plan to another driver. You will not be sent its trips.', 'plans');
+  notify(p.userId, `New driver for ${p.ref}`, `${d.name} (${d.vehicle || 'vehicle on file'}) will drive your ${KINDS[p.kind].toLowerCase()}.`, 'plans');
+  res.json({ plan: planView(updated, req.user) });
+}));
+
+/** Cancel on the customer's behalf (e.g. they phoned in). Same 24-hour rule and refunds as self-service. */
+router.post('/admin/plans/:id/cancel', opsWrite, wrap(async (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p || !OPEN_STATUSES.includes(p.status)) throw bad('This plan is already closed.');
+  const reason = str(req.body?.reason, 'Reason', { min: 3, max: 200 });
+  const immediate = req.body?.immediate === true && req.user.role === 'admin';
+  const effective = immediate || p.status === 'awaiting_payment' ? now() : new Date(Math.max(Date.now() + CANCEL_NOTICE_HOURS() * 3_600_000, Date.parse(`${p.startDate}T00:00:00+02:00`))).toISOString();
+  const updated = db.update('plans', p.id, { status: 'cancelled', cancelEffective: effective, cancelReason: reason, autoRenew: false, history: addHistory(p, 'cancelled', `Cancelled by ${req.user.name}: ${reason}`) });
+  audit(req.user, 'plan.cancelled', p.id, { plan: p.ref, reason, immediate: String(immediate) });
+  notify(p.userId, `${p.ref} cancelled`, `Your plan was cancelled by DROP support (${reason}). Every trip that doesn’t run is refunded when the period closes.`, 'plans');
+  if (p.driverId) notify(p.driverId, `Plan ${p.ref} cancelled`, 'This plan was cancelled by operations.', 'plans');
+  res.json({ plan: planView(updated, req.user) });
+}));
 
 export default router;
