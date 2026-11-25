@@ -76,7 +76,7 @@ export function refreshSession() {
 const BOT_CHECKED = /^\/(auth\/(login|register)|drivers\/apply|enquiries|bookings)$/;
 
 /** Requests that create trips or move money carry one key per user action (reused on retry), so they run once. */
-const IDEMPOTENT = /^\/(bookings|payments\/bookings\/[^/]+\/checkout|wallet\/withdrawals)$/;
+const IDEMPOTENT = /^\/(bookings|plans|payments\/(bookings|plans)\/[^/]+\/checkout|wallet\/withdrawals)$/;
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown; form?: FormData; idempotencyKey?: string } = {}, retried = false): Promise<T> {
   const headers: Record<string, string> = {};

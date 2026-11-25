@@ -15,7 +15,7 @@ import { Intro } from './motion/Intro';
 import { useDropMotion, useScrollProgress, useScrollSpy } from './motion/useDropMotion';
 import { BrandPage } from './brand/BrandPage';
 import { CommsProvider } from './lib/comms';
-import { PrivacyPage, TermsPage, DeleteAccountPage } from './legal/LegalPage';
+import { PrivacyPage, TermsPage, DeleteAccountPage, LegalIndex, LegalDocPage } from './legal/LegalPage';
 
 const services = [
   { name: 'Ride' as Service, tag: 'EVERYDAY, ELEVATED', description: 'Your everyday journey. A better way to get there.', icon: 'car' as IconName, image: '/images/drop-hero.webp', alt: 'Professional driver beside a premium SUV in Cape Town', features: ['Instant & scheduled rides', 'Upfront fare estimates', 'Card or cash, paid to your driver'] },
@@ -60,14 +60,17 @@ function Page() {
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('token');
     if (window.location.pathname === '/reset-password' && t) { setModalTitle('Choose a new password'); setModal({ kind: 'reset', token: t }); }
+    const topic = new URLSearchParams(window.location.search).get('info');
+    if (topic && topic.length < 60) { setModalTitle(topic); setModal({ kind: 'info', topic }); window.history.replaceState({}, '', '/'); }
   }, []);
   // Back from Paystack checkout: confirm the payment with the server, then show the trip.
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('payment_ref');
     if (!ref || !user) return;
     window.history.replaceState({}, '', window.location.pathname);
-    api<{ booking: Booking }>(`/payments/verify/${encodeURIComponent(ref)}`)
-      .then((r) => { setNotice('Payment received. We’re finding your driver.'); setModalTitle(''); setModal({ kind: 'booking', draft: { service: r.booking.service, pickup: r.booking.pickup, destination: r.booking.destination, when: 'Now', passengers: r.booking.passengers || 1 }, existing: r.booking }); })
+    api<{ booking: Booking; planId?: string }>(`/payments/verify/${encodeURIComponent(ref)}`)
+      .then((r) => {
+        if (r.planId) { setNotice('Payment received. Your monthly plan is confirmed and we’re matching a vetted driver.'); setModal({ kind: 'dashboard', tab: user.role === 'business' ? 'Staff transport' : 'Scholar transport' }); return; } setNotice('Payment received. We’re finding your driver.'); setModalTitle(''); setModal({ kind: 'booking', draft: { service: r.booking.service, pickup: r.booking.pickup, destination: r.booking.destination, when: 'Now', passengers: r.booking.passengers || 1 }, existing: r.booking }); })
       .catch((e) => setNotice((e as Error).message));
   }, [user]);
   useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(t); }, [notice]);
@@ -102,6 +105,12 @@ function Page() {
     if (l === 'My account') return account();
     if (l === 'Brand identity') { window.location.href = '/brand'; return; }
     if (l === 'Demo dashboards') { setModal({ kind: 'demo' }); return; }
+    const legal: Record<string, string> = { 'Terms of Service': 'terms', 'Privacy Policy': 'privacy', 'Driver Partner Agreement': 'driver-agreement', 'Scholar transport terms': 'scholar-transport', 'Cancellations & refunds': 'cancellations-refunds', 'Fees & tariffs': 'fees', 'PAIA manual': 'paia', 'All legal documents': '' };
+    if (l in legal) { window.location.href = `/legal${legal[l] ? `/${legal[l]}` : ''}`; return; }
+    if (l === 'Scholar transport' || l === 'Staff transport') {
+      if (user && ((l === 'Scholar transport' && user.role === 'passenger') || (l === 'Staff transport' && user.role === 'business'))) { setModal({ kind: 'dashboard', tab: l }); setMenu(false); return; }
+      return info(l);
+    }
     info(l);
   };
 
@@ -256,10 +265,10 @@ function Page() {
       <div className="mb-12 flex flex-wrap items-center justify-between gap-6"><Logo light tagline className="h-14" /><p className="max-w-sm text-sm leading-6 text-[#bcc5d2]">The future of mobility belongs to<br />the people who drive it.</p><button onClick={() => go('apps')} className="flex min-h-11 items-center gap-3 text-sm font-semibold text-lime">Discover the DROP apps <Icon name="arrow" size={17} /></button></div>
       <div className="grid grid-cols-2 gap-8 md:grid-cols-5">{[
         ['Company', 'About DROP', 'VINK Group', 'Our vision', 'Careers', 'Brand identity'],
-        ['Services', 'Ride', 'Delivery', 'Premium Drive', 'Corporate Mobility'],
+        ['Services', 'Ride', 'Delivery', 'Premium Drive', 'Scholar transport', 'Staff transport', 'Corporate Mobility'],
         ['Driver community', 'Become a driver', 'Driver ownership', 'Delivery partner', 'Fleet registration'],
         ['Support', 'Help centre', 'Safety centre', 'Contact us', 'Report an issue', 'My account', ...(demoOn ? ['Demo dashboards'] : [])],
-        ['Legal', 'Terms and conditions', 'Privacy policy', 'Driver agreement', 'Passenger terms', 'Fee structure'],
+        ['Legal', 'Terms of Service', 'Privacy Policy', 'Driver Partner Agreement', 'Scholar transport terms', 'Cancellations & refunds', 'Fees & tariffs', 'PAIA manual', 'All legal documents'],
       ].map(([heading, ...links]) => <div key={heading}><h3 className="mb-4 text-sm font-semibold">{heading}</h3>{links.map((l) => <button className="footer-link block min-h-9 text-left text-[13px] text-[#bcc5d3] hover:text-white" key={l} onClick={() => footerAction(l)}>{l}{l === 'VINK Group' && ' ↗'}</button>)}</div>)}</div>
       <div className="mt-12 grid gap-3 border-t border-white/15 pt-6 text-[12px] leading-5 text-[#ff8229] md:flex md:items-center md:justify-between">
         <span>© {new Date().getFullYear()} DROP — Drivers Owned Platform. All rights reserved.</span>
@@ -276,7 +285,7 @@ function Page() {
       {modal.kind === 'auth' && <AuthForm showDemo onDone={(u) => setModal({ kind: 'dashboard', tab: ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
       {modal.kind === 'driver' && <DriverApply onDashboard={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
       {modal.kind === 'dashboard' && (user ? <Dashboard key={`${user.id}:${modal.tab || 'Overview'}`} initialTab={modal.tab} onBook={() => book()} onTrack={(b) => { setModalTitle(''); setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b }); }} onOwnership={() => info('Driver ownership')} onNotice={setNotice} onSignedOut={close} /> : <AuthForm showDemo onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />)}
-      {modal.kind === 'info' && <InfoPanel topic={modal.topic} onBook={() => book()} onDriver={driver} onApps={() => go('apps')} onNotice={setNotice} onClose={close} onOpen={info} />}
+      {modal.kind === 'info' && <InfoPanel onAccount={(tab) => setModal(user ? { kind: 'dashboard', tab } : { kind: 'auth' })} topic={modal.topic} onBook={() => book()} onDriver={driver} onApps={() => go('apps')} onNotice={setNotice} onClose={close} onOpen={info} />}
     </Modal>}
 
     {notice && <div role="status" className="toast fixed bottom-5 left-1/2 z-[60] flex w-[calc(100%-32px)] max-w-xl -translate-x-1/2 items-center gap-4 rounded-xl border border-[#ff8229] bg-[#e4eaf2] p-4 text-sm leading-6 text-forest shadow-xl"><p className="flex-1">{notice}</p><button onClick={() => setNotice('')} className="flex h-11 w-11 shrink-0 items-center justify-center" aria-label="Dismiss notification"><Icon name="close" size={18} /></button></div>}
@@ -288,5 +297,7 @@ export default function App() {
   if (/^\/privacy\/?$/.test(window.location.pathname)) return <PrivacyPage />;
   if (/^\/terms\/?$/.test(window.location.pathname)) return <TermsPage />;
   if (/^\/delete-account\/?$/.test(window.location.pathname)) return <DeleteAccountPage />;
+  if (/^\/legal\/?$/.test(window.location.pathname)) return <LegalIndex />;
+  { const m = /^\/legal\/([a-z-]+)\/?$/.exec(window.location.pathname); if (m) return <LegalDocPage slug={m[1]} />; }
   return <AuthProvider><Page /></AuthProvider>;
 }

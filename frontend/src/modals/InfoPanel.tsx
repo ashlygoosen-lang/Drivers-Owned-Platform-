@@ -48,8 +48,8 @@ function FeeTable() {
     </table></div>)}</div>;
 }
 
-export function InfoPanel({ topic, onBook, onDriver, onApps, onNotice, onClose, onOpen }: {
-  topic: string; onBook: () => void; onDriver: () => void; onApps: () => void; onNotice: (m: string) => void; onClose: () => void; onOpen: (t: string) => void;
+export function InfoPanel({ topic, onBook, onDriver, onApps, onNotice, onClose, onOpen, onAccount }: {
+  topic: string; onAccount?: (tab: string) => void; onBook: () => void; onDriver: () => void; onApps: () => void; onNotice: (m: string) => void; onClose: () => void; onOpen: (t: string) => void;
 }) {
   const sent = (ref: string) => { onNotice(`Thank you. Your message (${ref}) has reached the DROP team and we'll be in touch.`); onClose(); };
   const t = topic.toLowerCase();
@@ -70,6 +70,24 @@ export function InfoPanel({ topic, onBook, onDriver, onApps, onNotice, onClose, 
   if (/contact|help|support|careers|issue/.test(t)) return <div className={`grid gap-5 ${p}`}>
     <p>{/careers/.test(t) ? 'We’re building a team that believes mobility should work for the people who power it. Tell us about yourself and the role you’re interested in.' : /issue/.test(t) ? 'Tell us what happened. If it relates to a trip, include your booking reference (it starts with DRP-). Signed-in users can also raise tickets from their dashboard.' : `Questions about rides, deliveries, driving with DROP or business accounts? Send us a message or email ${COMPANY.email}.`}</p>
     <ContactForm topic={/issue/.test(t) ? 'Report an issue' : /careers/.test(t) ? 'General enquiry' : 'General enquiry'} onSent={sent} />
+  </div>;
+
+  if (/scholar transport/.test(t)) return <div className={`grid gap-5 ${p}`}>
+    <p>Monthly school transport with <b>one vetted driver</b> for the whole month. Book the morning and afternoon trips once, and follow every trip live with pickup and drop-off notifications.</p>
+    <ul className="grid gap-2">{[
+      ['Child-safety vetting', 'Scholar drivers hold a police clearance, a clearance from the National Child Protection Register and the National Register for Sex Offenders, and a learner-transport operating licence, checked by our compliance team.'],
+      ['One seat per learner', 'Every learner has their own seat and seat belt. No sharing seats.'],
+      ['Your handover rules', 'Choose whether the driver hands over to a staff member at school, lets the learner walk in, or hands over only to you.'],
+      ['Fair monthly price', '15% below on-demand fares, public holidays excluded, and every skipped or unused day refunded at month end.'],
+    ].map(([h, d]) => <li key={h} className="flex gap-3"><Icon name="check" size={18} className="mt-1 shrink-0 text-forest" /><span><b className="text-forest">{h}.</b> {d}</span></li>)}</ul>
+    <p>Book from a verified personal account under My DROP → Scholar transport. <a className="underline" href="/legal/scholar-transport">Read the scholar transport terms</a>.</p>
+    <div className="flex flex-wrap gap-3"><button className={button} onClick={() => (onAccount ? onAccount('Scholar transport') : onBook())}>Book scholar transport <Icon name="arrow" size={16} /></button><button className={outline} onClick={onDriver}>Drive scholar transport</button></div>
+  </div>;
+
+  if (/staff transport/.test(t)) return <div className={`grid gap-5 ${p}`}>
+    <p>Daily commutes for your team on a monthly plan: one route, one driver, the shift times you set, and every trip on your monthly business invoice — you pay only for trips driven, at 15% below on-demand fares.</p>
+    <p>Set it up from a verified business account under My DROP → Staff transport. <a className="underline" href="/legal/staff-transport">Read the staff transport terms</a>.</p>
+    <div className="flex flex-wrap gap-3"><button className={button} onClick={() => (onAccount ? onAccount('Staff transport') : onBook())}>Set up staff transport <Icon name="arrow" size={16} /></button><button className={outline} onClick={() => onOpen('Business solutions')}>Talk to us</button></div>
   </div>;
 
   if (/corporate|business/.test(t)) return <div className={`grid gap-5 ${p}`}><p>DROP for Business gives your company one account for staff travel, airport transfers and deliveries: monthly invoicing, a team list, and a clear record of every trip, all with no passenger platform commission.</p><ContactForm topic="Business solutions" onSent={sent} /></div>;

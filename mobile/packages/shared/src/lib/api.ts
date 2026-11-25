@@ -54,7 +54,7 @@ export function refresh() {
 }
 
 /** Requests that create money or trips: each user action gets one key, reused on retries, so the server runs it once. */
-const IDEMPOTENT = /^\/(bookings|payments\/bookings\/[^/]+\/checkout|wallet\/withdrawals)$/;
+const IDEMPOTENT = /^\/(bookings|plans|payments\/(bookings|plans)\/[^/]+\/checkout|wallet\/withdrawals)$/;
 function newKey() {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
   if (c?.randomUUID) return c.randomUUID();

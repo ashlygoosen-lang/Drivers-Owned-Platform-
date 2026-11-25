@@ -14,15 +14,16 @@ import { TripComms } from '../components/TripComms';
 import { MfaSetup } from '../components/TwoStep';
 import { LiveMap, useDriverGps, GpsStatus } from '../components/LiveMap';
 import { FleetMap } from './FleetMap';
+import { OwnerPlans, DriverPlans, AdminPlans } from './Plans';
 
 const TABS = {
-  passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Places & payment', 'Notifications', 'Profile', 'Support'],
-  driver: ['Overview', 'Verification', 'Ride requests', 'Wallet & card', 'Trip history', 'Vehicle & application', 'Ownership', 'Notifications', 'Profile', 'Support'],
-  business: ['Overview', 'Verification', 'Company bookings', 'Employees', 'Invoices', 'Notifications', 'Account', 'Support'],
+  passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Scholar transport', 'Places & payment', 'Notifications', 'Profile', 'Support'],
+  driver: ['Overview', 'Verification', 'Ride requests', 'Monthly plans', 'Wallet & card', 'Trip history', 'Vehicle & application', 'Ownership', 'Notifications', 'Profile', 'Support'],
+  business: ['Overview', 'Verification', 'Company bookings', 'Staff transport', 'Employees', 'Invoices', 'Notifications', 'Account', 'Support'],
   compliance: ['Overview', 'Verification queue', 'Expiring documents', 'Audit log', 'Notifications', 'Profile'],
-  support: ['Overview', 'Live map', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
-  finance: ['Overview', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Bookings', 'Users', 'Notifications', 'Profile'],
-  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Security', 'Staff', 'Notifications', 'Profile'],
+  support: ['Overview', 'Live map', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Plans', 'Notifications', 'Profile'],
+  finance: ['Overview', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Bookings', 'Plans', 'Users', 'Notifications', 'Profile'],
+  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Plans', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Security', 'Staff', 'Notifications', 'Profile'],
 } as const;
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
@@ -280,7 +281,7 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
   if (!user) return null;
   const tabs = TABS[user.role] as readonly string[];
   const customer = ['passenger', 'driver', 'business'].includes(user.role);
-  const openLink = (link: string) => setTab(({ verification: 'Verification', queue: 'Verification queue', application: 'Vehicle & application', wallet: 'Wallet & card' } as Record<string, string>)[link] || 'Overview');
+  const openLink = (link: string) => setTab(({ verification: 'Verification', queue: 'Verification queue', application: 'Vehicle & application', wallet: 'Wallet & card', plans: ({ driver: 'Monthly plans', business: 'Staff transport', passenger: 'Scholar transport' } as Record<string, string>)[user.role] || 'Plans' } as Record<string, string>)[link] || 'Overview');
   const overviewAction = { driver: ['View ride requests', () => setTab('Ride requests')], admin: ['Open verification queue', () => setTab('Verification queue')], compliance: ['Open verification queue', () => setTab('Verification queue')], support: ['Open tickets', () => setTab('Tickets')], finance: ['Open payouts', () => setTab('Payouts')] } as Record<string, [string, () => void]>;
   const [actionLabel, action] = overviewAction[user.role] || ['Book a journey', onBook];
   const view = () => {
@@ -312,6 +313,10 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
       case 'Users': return <AdminUsers notify={onNotice} readOnly={user.role !== 'admin'} />;
       case 'Bookings': return <AdminBookings />;
       case 'Live map': return <FleetMap />;
+      case 'Scholar transport': return <OwnerPlans kind="scholar" notify={onNotice} />;
+      case 'Staff transport': return <OwnerPlans kind="staff" notify={onNotice} />;
+      case 'Monthly plans': return <DriverPlans notify={onNotice} />;
+      case 'Plans': return <AdminPlans />;
       case 'Security': return <SecurityPanel notify={onNotice} />;
       case 'Tickets': return <AdminTickets notify={onNotice} />;
       case 'Enquiries': return <AdminEnquiries notify={onNotice} />;

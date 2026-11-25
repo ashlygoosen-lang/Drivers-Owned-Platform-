@@ -53,7 +53,20 @@ These are the first things to run once §5 items 1–8 are done.
 
 1. **Phone calls (SEC-016).** Without Twilio, the call button shows real phone numbers to the other party. Choose Twilio masked numbers (per-minute call charges plus a monthly number rental; check Twilio's South African pricing) or accept direct numbers. Recommendation: Twilio before public launch.
 2. **Maps key (SEC-022).** In Google Cloud, restrict the browser key to your domains and the Maps JavaScript API, and set a daily quota.
-3. **Legal.** Have the privacy notice and terms reviewed, and register the Information Officer with the Information Regulator (POPIA).
+3. **Legal.** A full South African legal set is now published at `/legal`:
+   - Terms of Service and Website and App Terms of Use
+   - Privacy Policy (POPIA, including children's information) and Cookie Notice
+   - Driver Partner Agreement
+   - Scholar Transport Terms and Staff Transport Terms
+   - Cancellation and Refund Policy and Fees and Tariffs
+   - Community Guidelines and PAIA Manual
+
+   Before launch:
+   - Have a South African attorney review the set.
+   - Fill in the [bracketed] items in `frontend/src/lib/company.ts`: address, directors, Information Officer, VAT and NPTR numbers.
+   - Confirm the proposed policy figures: R2,000 parcel liability limit, 30-day invoice terms, the 15% plan discount and the notice periods.
+   - Register the Information Officer with the Information Regulator.
+4. **Scholar transport.** Monthly scholar plans are only offered to drivers whose police clearance, child-protection clearance (National Child Protection Register and National Register for Sex Offenders) and learner-transport operating licence have been approved. Decide how compliance will verify the register checks (Form 30 and NRSO certificates), and confirm with the provincial regulator which operating licence your drivers need for learner transport.
 
 ## 4. Remaining risks (honest view)
 
