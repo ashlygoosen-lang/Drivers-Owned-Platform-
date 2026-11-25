@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+dist/
+web-build/
+# Generated native projects (EAS builds create them; nothing hand-edited lives there)
+apps/*/android/
+apps/*/ios/
+# Signing material never goes in git
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+*.pem
+google-service-account*.json
