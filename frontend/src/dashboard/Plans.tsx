@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, money } from '../lib/api';
 import { button, outline, input, Field, ErrorText, Icon, Spinner, StatusPill } from '../components/ui';
-import { useLoad, Loading, Empty, Table, type Notify } from './common';
+import { useLoad, Loading, Empty, type Notify } from './common';
 
 /** Monthly plans: scholar transport (parents and guardians), staff transport (business accounts), and the driver side. */
 export type PlanKind = 'scholar' | 'staff';
@@ -25,82 +25,16 @@ const RELATIONSHIP = ['Parent', 'Legal guardian', 'Grandparent or family member 
 const STATUS: Record<string, string> = { awaiting_payment: 'Awaiting payment', awaiting_driver: 'Finding a driver', active: 'Active', completed: 'Completed', cancelled: 'Cancelled', expired: 'Expired' };
 const prettyDate = (d: string) => new Date(`${d}T12:00:00+02:00`).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });
 const days = (d: number[]) => (d.join() === '1,2,3,4,5' ? 'Weekdays' : d.map((x) => DAY_NAMES[x - 1]).join(', '));
-const sastToday = () => new Date(Date.now() + 2 * 3_600_000).toISOString().slice(0, 10);
 const firstOfNextMonth = () => { const n = new Date(Date.now() + 2 * 3_600_000); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 1)).toISOString().slice(0, 10); };
 const tomorrow = () => new Date(Date.now() + 2 * 3_600_000 + 86_400_000).toISOString().slice(0, 10);
 
-async function payPlan(id: string) {
+export async function payPlan(id: string) {
   const r = await api<{ authorizationUrl: string }>(`/payments/plans/${id}/checkout`, { body: {} });
   window.location.href = r.authorizationUrl;
 }
 
-/* ============ Parent / guardian and business: list and manage ============ */
-export function OwnerPlans({ kind, notify }: { kind: PlanKind; notify: Notify }) {
-  const { data, error, reload } = useLoad<{ plans: Plan[] }>('/plans');
-  const [creating, setCreating] = useState(false);
-  const list = (data?.plans || []).filter((p) => p.kind === kind);
-  if (creating) return <PlanForm kind={kind} notify={notify} onDone={() => { setCreating(false); void reload(); }} />;
-  return <div className="grid gap-5">
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="max-w-xl text-sm leading-6 text-[#4a576a]">{kind === 'scholar'
-        ? <p>One vetted driver for the school run, booked by the month. Drivers on scholar plans hold a police clearance, a child-protection clearance and a learner-transport operating licence, checked by our compliance team. Days you skip with {12} hours’ notice, and public holidays, are not charged.</p>
-        : <p>Daily commutes for your team on one monthly plan with one driver, invoiced to your business account with your other trips. Set up a plan per route and shift.</p>}
-        <p className="mt-2"><a className="underline" href={kind === 'scholar' ? '/legal/scholar-transport' : '/legal/staff-transport'} target="_blank" rel="noopener">{kind === 'scholar' ? 'Scholar transport terms' : 'Staff transport terms'}</a> · <a className="underline" href="/legal/cancellations-refunds" target="_blank" rel="noopener">Cancellations and refunds</a></p>
-      </div>
-      <button className={button} onClick={() => setCreating(true)}><Icon name="plus" size={16} />New {kind === 'scholar' ? 'scholar' : 'staff'} plan</button>
-    </div>
-    <ErrorText>{error}</ErrorText>
-    {!data ? <Loading /> : !list.length ? <Empty>No {kind === 'scholar' ? 'scholar transport' : 'staff transport'} plans yet.</Empty>
-      : list.map((p) => <PlanCard key={p.id} plan={p} notify={notify} onChange={reload} />)}
-  </div>;
-}
-
-function PlanCard({ plan: p, notify, onChange }: { plan: Plan; notify: Notify; onChange: () => void }) {
-  const [busy, setBusy] = useState('');
-  const [open, setOpen] = useState(false);
-  const [trips, setTrips] = useState<{ id: string; ref: string; date: string; leg: string; status: string }[] | null>(null);
-  const run = async (what: string, fn: () => Promise<unknown>, done?: string) => {
-    setBusy(what);
-    try { await fn(); if (done) notify(done); onChange(); } catch (e) { notify((e as Error).message); } finally { setBusy(''); }
-  };
-  const future = p.pricing.dates.filter((d) => d > sastToday());
-  const live = ['awaiting_payment', 'awaiting_driver', 'active'].includes(p.status);
-  useEffect(() => { if (open && !trips) api<{ trips: typeof trips }>(`/plans/${p.id}`).then((r) => setTrips(r.trips)).catch(() => setTrips([])); }, [open, trips, p.id]);
-  return <article className="rounded-xl border border-[#d2dae4] p-5">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><p className="text-[12px] font-semibold uppercase tracking-wide text-[#5b6b82]">{p.ref} · {p.kindLabel}</p>
-        <h4 className="mt-1 text-lg font-semibold">{p.kind === 'scholar' ? p.school : p.destination}</h4>
-        <p className="text-sm text-[#4a576a]">{prettyDate(p.startDate)} – {prettyDate(p.endDate)} · {days(p.days)} · {p.legs.map((l) => l.time).join(' & ')} · {p.category}</p></div>
-      <div className="text-right"><StatusPill status={STATUS[p.status] || p.status} /><p className="mt-2 text-xl font-semibold">{money(p.pricing.total)}</p><p className="text-[12px] text-[#5b6b82]">{p.pricing.trips} trips · {p.payment === 'Card' ? 'paid by card' : 'invoiced'}</p></div>
-    </div>
-    <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-      <p><b>{p.kind === 'scholar' ? 'Learners' : 'Staff'}:</b> {(p.riders || []).map((r) => (r.grade ? `${r.name} (${r.grade})` : r.name)).join(', ')}</p>
-      <p><b>Driver:</b> {p.driver ? `${p.driver.name}${p.driver.vehicle ? ` · ${p.driver.vehicle}` : ''}${p.driver.rating ? ` · ★ ${p.driver.rating}` : ''}` : 'Not confirmed yet — each trip is offered to the nearest vetted driver until one accepts the month'}</p>
-      {p.skipDates.length > 0 && <p className="sm:col-span-2"><b>Skipped:</b> {p.skipDates.map(prettyDate).join(', ')} (refunded at the end of the period)</p>}
-      {p.cancelEffective && <p className="sm:col-span-2"><b>Cancelled:</b> no trips after {new Date(p.cancelEffective).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}. Unused trips are refunded when the period closes.</p>}
-      {p.refundedAmount > 0 && <p className="sm:col-span-2"><b>Refunded:</b> {money(p.refundedAmount)} for unused trips.</p>}
-    </div>
-    <div className="mt-4 flex flex-wrap items-center gap-2">
-      {p.status === 'awaiting_payment' && <button className={button} disabled={!!busy} onClick={() => run('pay', () => payPlan(p.id))}>{busy === 'pay' && <Spinner />}Pay {money(p.pricing.total)}</button>}
-      {live && future.length > 0 && <label className="flex items-center gap-2 text-sm">Skip a day
-        <select className={`${input} min-h-10 w-auto`} disabled={!!busy} value="" onChange={(e) => e.target.value && run('skip', () => api(`/plans/${p.id}/skip`, { body: { date: e.target.value } }), 'Day skipped.')}>
-          <option value="">Choose…</option>{future.filter((d) => !p.skipDates.includes(d)).map((d) => <option key={d} value={d}>{prettyDate(d)}</option>)}
-        </select></label>}
-      {live && p.skipDates.filter((d) => d > sastToday()).map((d) => <button key={d} className={outline} disabled={!!busy} onClick={() => run('undo', () => api(`/plans/${p.id}/skip`, { body: { date: d, undo: true } }), 'Day restored.')}>Restore {prettyDate(d)}</button>)}
-      {p.status === 'active' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={p.autoRenew} disabled={!!busy} onChange={(e) => run('renew', () => api(`/plans/${p.id}/auto-renew`, { body: { autoRenew: e.target.checked } }))} />Renew next month</label>}
-      <button className={outline} onClick={() => setOpen(!open)}>{open ? 'Hide trips' : 'Trips'}</button>
-      {live && <button className={`${outline} text-red-700`} disabled={!!busy} onClick={() => {
-        if (!window.confirm(p.status === 'awaiting_payment' ? 'Cancel this plan?' : 'Cancel this plan? Trips stop 24 hours from now, and every trip that doesn’t run is refunded when the period closes.')) return;
-        void run('cancel', () => api(`/plans/${p.id}/cancel`, { body: {} }), 'Plan cancelled.');
-      }}>Cancel plan</button>}
-    </div>
-    {open && <div className="mt-4">{!trips ? <Loading /> : !trips.length ? <Empty>Trips appear here 45 minutes before each pickup.</Empty>
-      : <Table head={['Date', 'Trip', 'Ref', 'Status']} rows={trips.map((t) => [prettyDate(t.date), t.leg === 'out' ? p.legs[0].label : p.legs[1]?.label, t.ref, <StatusPill key={t.id} status={t.status} />])} />}</div>}
-  </article>;
-}
-
 /* ============ New plan ============ */
-function PlanForm({ kind, notify, onDone }: { kind: PlanKind; notify: Notify; onDone: () => void }) {
+export function PlanForm({ kind, notify, onDone }: { kind: PlanKind; notify: Notify; onDone: () => void }) {
   const scholar = kind === 'scholar';
   const [f, setF] = useState({ school: '', pickup: '', destination: '', outTime: scholar ? '06:45' : '07:00', returnTime: scholar ? '14:30' : '17:00', twoWay: true, category: 'Comfort', startDate: firstOfNextMonth(), days: [1, 2, 3, 4, 5] });
   const [riders, setRiders] = useState<Rider[]>([{ name: '', grade: scholar ? 'Grade 1' : undefined }]);
@@ -210,13 +144,4 @@ export function DriverPlans({ notify }: { notify: Notify }) {
       </article>)}</div>}
     </section>
   </div>;
-}
-
-/* ============ Staff ============ */
-export function AdminPlans() {
-  const { data, error } = useLoad<{ plans: Plan[] }>('/admin/plans');
-  if (error) return <ErrorText>{error}</ErrorText>;
-  if (!data) return <Loading />;
-  if (!data.plans.length) return <Empty>No monthly plans yet.</Empty>;
-  return <Table head={['Plan', 'Customer', 'Period', 'Driver', 'Total', 'Status']} rows={data.plans.map((p) => [`${p.ref} · ${p.kindLabel}`, p.owner?.name || '', `${p.startDate} – ${p.endDate}`, p.driver?.name || '—', money(p.pricing.total), <StatusPill key={p.id} status={STATUS[p.status] || p.status} />])} />;
 }

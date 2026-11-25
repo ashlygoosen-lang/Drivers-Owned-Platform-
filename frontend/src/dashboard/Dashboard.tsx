@@ -14,7 +14,9 @@ import { TripComms } from '../components/TripComms';
 import { MfaSetup } from '../components/TwoStep';
 import { LiveMap, useDriverGps, GpsStatus } from '../components/LiveMap';
 import { FleetMap } from './FleetMap';
-import { OwnerPlans, DriverPlans, AdminPlans } from './Plans';
+import { DriverPlans } from './Plans';
+import { PlanDashboard } from './PlanDashboard';
+import { PlanOps } from './PlanOps';
 
 const TABS = {
   passenger: ['Overview', 'Verification', 'Book a ride', 'My trips', 'Scholar transport', 'Places & payment', 'Notifications', 'Profile', 'Support'],
@@ -313,10 +315,10 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
       case 'Users': return <AdminUsers notify={onNotice} readOnly={user.role !== 'admin'} />;
       case 'Bookings': return <AdminBookings />;
       case 'Live map': return <FleetMap />;
-      case 'Scholar transport': return <OwnerPlans kind="scholar" notify={onNotice} />;
-      case 'Staff transport': return <OwnerPlans kind="staff" notify={onNotice} />;
+      case 'Scholar transport': return <PlanDashboard kind="scholar" notify={onNotice} onTrack={onTrack} />;
+      case 'Staff transport': return <PlanDashboard kind="staff" notify={onNotice} onTrack={onTrack} />;
       case 'Monthly plans': return <DriverPlans notify={onNotice} />;
-      case 'Plans': return <AdminPlans />;
+      case 'Plans': return <PlanOps notify={onNotice} canWrite={['admin', 'support'].includes(user.role)} />;
       case 'Security': return <SecurityPanel notify={onNotice} />;
       case 'Tickets': return <AdminTickets notify={onNotice} />;
       case 'Enquiries': return <AdminEnquiries notify={onNotice} />;
