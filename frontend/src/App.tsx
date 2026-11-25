@@ -15,6 +15,7 @@ import { Intro } from './motion/Intro';
 import { useDropMotion, useScrollProgress, useScrollSpy } from './motion/useDropMotion';
 import { BrandPage } from './brand/BrandPage';
 import { CommsProvider } from './lib/comms';
+import { GroupTravelPage } from './travel/GroupTravel';
 import { PrivacyPage, TermsPage, DeleteAccountPage, LegalIndex, LegalDocPage } from './legal/LegalPage';
 
 const services = [
@@ -36,7 +37,8 @@ const howSteps: Record<string, [string, string][]> = {
 };
 
 function Page() {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
+  const [afterAuthTab, setAfterAuthTab] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [modalTitle, setModalTitle] = useState('');
   const [service, setService] = useState<Service>('Ride');
@@ -63,13 +65,21 @@ function Page() {
     const topic = new URLSearchParams(window.location.search).get('info');
     if (topic && topic.length < 60) { setModalTitle(topic); setModal({ kind: 'info', topic }); window.history.replaceState({}, '', '/'); }
   }, []);
+  // /?open=group-travel (from the public group travel page): straight to the tab, signing in first if needed.
+  useEffect(() => {
+    if (!ready || new URLSearchParams(window.location.search).get('open') !== 'group-travel') return;
+    window.history.replaceState({}, '', '/');
+    if (user) setModal({ kind: 'dashboard', tab: 'Group travel' });
+    else { setAfterAuthTab('Group travel'); setModal({ kind: 'auth' }); }
+  }, [ready, user]);
   // Back from Paystack checkout: confirm the payment with the server, then show the trip.
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('payment_ref');
     if (!ref || !user) return;
     window.history.replaceState({}, '', window.location.pathname);
-    api<{ booking: Booking; planId?: string }>(`/payments/verify/${encodeURIComponent(ref)}`)
+    api<{ booking: Booking; planId?: string; groupBookingId?: string; paid?: boolean }>(`/payments/verify/${encodeURIComponent(ref)}`)
       .then((r) => {
+        if (r.groupBookingId) { setNotice(r.paid ? 'Payment received. Your seats in the group are confirmed; we’ll keep you posted as it fills.' : 'We couldn’t confirm that payment. Check My DROP → Group travel.'); setModal({ kind: 'dashboard', tab: 'Group travel' }); return; }
         if (r.planId) { setNotice('Payment received. Your monthly plan is confirmed and we’re matching a vetted driver.'); setModal({ kind: 'dashboard', tab: user.role === 'business' ? 'Staff transport' : 'Scholar transport' }); return; } setNotice('Payment received. We’re finding your driver.'); setModalTitle(''); setModal({ kind: 'booking', draft: { service: r.booking.service, pickup: r.booking.pickup, destination: r.booking.destination, when: 'Now', passengers: r.booking.passengers || 1 }, existing: r.booking }); })
       .catch((e) => setNotice((e as Error).message));
   }, [user]);
@@ -104,6 +114,7 @@ function Page() {
     if (l === 'Corporate Mobility') return info('Business solutions');
     if (l === 'My account') return account();
     if (l === 'Brand identity') { window.location.href = '/brand'; return; }
+    if (l === 'Group travel') { window.location.href = '/group-travel'; return; }
     if (l === 'Demo dashboards') { setModal({ kind: 'demo' }); return; }
     const legal: Record<string, string> = { 'Terms of Service': 'terms', 'Privacy Policy': 'privacy', 'Driver Partner Agreement': 'driver-agreement', 'Scholar transport terms': 'scholar-transport', 'Cancellations & refunds': 'cancellations-refunds', 'Fees & tariffs': 'fees', 'PAIA manual': 'paia', 'All legal documents': '' };
     if (l in legal) { window.location.href = `/legal${legal[l] ? `/${legal[l]}` : ''}`; return; }
@@ -265,7 +276,7 @@ function Page() {
       <div className="mb-12 flex flex-wrap items-center justify-between gap-6"><Logo light tagline className="h-14" /><p className="max-w-sm text-sm leading-6 text-[#bcc5d2]">The future of mobility belongs to<br />the people who drive it.</p><button onClick={() => go('apps')} className="flex min-h-11 items-center gap-3 text-sm font-semibold text-lime">Discover the DROP apps <Icon name="arrow" size={17} /></button></div>
       <div className="grid grid-cols-2 gap-8 md:grid-cols-5">{[
         ['Company', 'About DROP', 'VINK Group', 'Our vision', 'Careers', 'Brand identity'],
-        ['Services', 'Ride', 'Delivery', 'Premium Drive', 'Scholar transport', 'Staff transport', 'Corporate Mobility'],
+        ['Services', 'Ride', 'Delivery', 'Premium Drive', 'Group travel', 'Scholar transport', 'Staff transport', 'Corporate Mobility'],
         ['Driver community', 'Become a driver', 'Driver ownership', 'Delivery partner', 'Fleet registration'],
         ['Support', 'Help centre', 'Safety centre', 'Contact us', 'Report an issue', 'My account', ...(demoOn ? ['Demo dashboards'] : [])],
         ['Legal', 'Terms of Service', 'Privacy Policy', 'Driver Partner Agreement', 'Scholar transport terms', 'Cancellations & refunds', 'Fees & tariffs', 'PAIA manual', 'All legal documents'],
@@ -282,7 +293,7 @@ function Page() {
       {modal.kind === 'booking' && <BookingFlow draft={modal.draft} existing={modal.existing} onTitle={setModalTitle} onNotice={setNotice} onClose={close} onVerify={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
       {modal.kind === 'reset' && <ResetPassword token={modal.token} onDone={() => setModal({ kind: 'auth' })} />}
       {modal.kind === 'demo' && <DemoPicker onDone={() => setModal({ kind: 'dashboard' })} />}
-      {modal.kind === 'auth' && <AuthForm showDemo onDone={(u) => setModal({ kind: 'dashboard', tab: ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
+      {modal.kind === 'auth' && <AuthForm showDemo onDone={(u) => setModal({ kind: 'dashboard', tab: afterAuthTab && u.role !== 'driver' ? afterAuthTab : ['passenger', 'business'].includes(u.role) && u.verificationStatus !== 'verified' && u.verificationStatus !== 'submitted' ? 'Verification' : 'Overview' })} onDriver={driver} />}
       {modal.kind === 'driver' && <DriverApply onDashboard={() => setModal({ kind: 'dashboard', tab: 'Verification' })} />}
       {modal.kind === 'dashboard' && (user ? <Dashboard key={`${user.id}:${modal.tab || 'Overview'}`} initialTab={modal.tab} onBook={() => book()} onTrack={(b) => { setModalTitle(''); setModal({ kind: 'booking', draft: { service: b.service, pickup: b.pickup, destination: b.destination, when: 'Now', passengers: b.passengers || 1 }, existing: b }); }} onOwnership={() => info('Driver ownership')} onNotice={setNotice} onSignedOut={close} /> : <AuthForm showDemo onDone={() => setModal({ kind: 'dashboard' })} onDriver={driver} />)}
       {modal.kind === 'info' && <InfoPanel onAccount={(tab) => setModal(user ? { kind: 'dashboard', tab } : { kind: 'auth' })} topic={modal.topic} onBook={() => book()} onDriver={driver} onApps={() => go('apps')} onNotice={setNotice} onClose={close} onOpen={info} />}
@@ -294,6 +305,7 @@ function Page() {
 
 export default function App() {
   if (/^\/brand\/?$/.test(window.location.pathname)) return <BrandPage />;
+  if (/^\/group-travel\/?$/.test(window.location.pathname)) return <GroupTravelPage />;
   if (/^\/privacy\/?$/.test(window.location.pathname)) return <PrivacyPage />;
   if (/^\/terms\/?$/.test(window.location.pathname)) return <TermsPage />;
   if (/^\/delete-account\/?$/.test(window.location.pathname)) return <DeleteAccountPage />;
