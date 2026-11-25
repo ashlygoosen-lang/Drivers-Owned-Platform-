@@ -1,3 +1,5 @@
+> **Update (25 Nov 2026):** both apps are now built. See [05-mobile-apps.md](05-mobile-apps.md) and [mobile/store-submission.md](mobile/store-submission.md). The roadmap below is kept for history.
+
 # DROP passenger & driver apps — implementation plan
 
 The website and API already provide accounts, fares, bookings, the driver queue, trip status, ratings, support and admin.

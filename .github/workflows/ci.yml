@@ -38,6 +38,31 @@ jobs:
       - name: Frontend type-check and build
         run: npm run build --prefix frontend
 
+  mobile:
+    name: Mobile apps (type-check, unit tests, bundle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      - name: Bundle both apps (Android + iOS, Hermes)
+        env:
+          CI: '1'
+        run: |
+          for app in passenger driver; do
+            (cd apps/$app && npx expo export --platform android --output-dir /tmp/$app-android && npx expo export --platform ios --output-dir /tmp/$app-ios)
+          done
+
   dependencies:
     name: Dependency vulnerabilities
     runs-on: ubuntu-latest
@@ -51,12 +76,14 @@ jobs:
         run: |
           npm audit --prefix backend --omit=dev --audit-level=high
           npm audit --prefix frontend --audit-level=high
+          npm audit --prefix mobile --omit=dev --audit-level=high
       - name: OSV-Scanner
         uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
         with:
           scan-args: |-
             --lockfile=backend/package-lock.json
             --lockfile=frontend/package-lock.json
+            --lockfile=mobile/package-lock.json
 
   secrets:
     name: Secret scanning

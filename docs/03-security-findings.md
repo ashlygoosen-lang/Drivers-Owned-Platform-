@@ -16,13 +16,13 @@ Every **Fixed** item has an automated test in `backend/test/security.test.js` (1
 | SEC-007 | Medium | User objects leak secret fields (encrypted bank number, later MFA secret) | Fixed |
 | SEC-008 | Medium | SA ID / passport numbers stored in plain text at rest | Fixed (Phase 4) |
 | SEC-009 | Medium | No idempotency on booking creation (a double tap makes two bookings) | Open (Phase 6) |
-| SEC-011 | Medium | No self-service password reset | Needs owner decision |
+| SEC-011 | Medium | No self-service password reset | Fixed (Phase 5; set RESEND_API_KEY to send the emails) |
 | SEC-012 | Medium | Rate limits are in memory, per instance | Fixed (Phase 4; Redis when REDIS_URL is set) |
 | SEC-013 | Medium | Audit log is not tamper-evident | Fixed (Phase 4) |
 | SEC-016 | Medium | "Direct" phone mode shares real phone numbers during a trip | Needs owner decision |
 | SEC-017 | Medium | Session token in `localStorage`; no refresh-token rotation | Fixed (Phase 4) |
 | SEC-019 | Medium | No security checks in CI (SAST, secrets, dependency, DAST) | Fixed (Phase 4); turn on branch protection to enforce |
-| SEC-021 | Medium | Driver GPS can be spoofed by a modified client | Open (Phase 5) |
+| SEC-021 | Medium | Driver GPS can be spoofed by a modified client | Mitigated (Phase 5): app attestation and plausibility checks on the server; speed/teleport checks still open |
 | SEC-022 | Medium | Google Maps browser key must be referrer-restricted | Needs owner action |
 | SEC-024 | Medium | AES-GCM decryption accepted shortened authentication tags (found by the new CI Semgrep gate) | Fixed (Phase 4) |
 | SEC-010 | Low | Sequential booking refs accepted in place of UUIDs | Open |
