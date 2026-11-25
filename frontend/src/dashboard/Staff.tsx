@@ -49,3 +49,31 @@ export function Notifications({ onOpen }: { onOpen: (link: string) => void }) {
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-[#cbd3de]' : 'bg-orange'}`} /><span className="flex-1"><b>{n.title}</b><span className="block text-[#5b6b82]">{n.body}</span></span><span className="shrink-0 text-[12px] text-[#8a97a8]">{date(n.createdAt)}</span></button></li>)}</ul>
   </div>;
 }
+
+interface SecurityEvent { id: string; type: string; severity: 'info' | 'medium' | 'high'; detail: Record<string, string>; at: string }
+interface SecurityData { audit: { ok: boolean; entries?: number; brokenAt?: number; legacy: number }; events: SecurityEvent[]; maintenance: { on: boolean; message?: string; by?: string; at?: string } }
+
+/** Admin: audit-log integrity, security events and the maintenance switch (incident response). */
+export function SecurityPanel({ notify }: { notify: Notify }) {
+  const { data, error, reload } = useLoad<SecurityData>('/admin/security');
+  const [msg, setMsg] = useState('');
+  if (error) return <ErrorText>{error}</ErrorText>;
+  if (!data) return <Loading />;
+  const toggle = async (on: boolean) => {
+    if (on && !confirm('Put DROP into maintenance mode? Customers will see a maintenance message until you turn it off. Staff can still work.')) return;
+    try { await api('/admin/maintenance', { body: { on, message: msg } }); notify(on ? 'Maintenance mode is on.' : 'DROP is open again.'); void reload(); } catch (err) { notify((err as Error).message); }
+  };
+  const tone = { high: 'bg-red-100 text-red-900', medium: 'bg-orange/15 text-[#8a3a00]', info: 'bg-[#eef1f5] text-[#4d5b71]' };
+  return <div className="grid gap-5">
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className={`rounded-xl p-4 ${data.audit.ok ? 'bg-[#e7f6ee]' : 'bg-red-100'}`}><b className="flex items-center gap-2"><Icon name={data.audit.ok ? 'check' : 'shield'} size={18} />Audit log {data.audit.ok ? 'intact' : 'TAMPERED'}</b><p className="mt-1 text-[13px]">{data.audit.ok ? `${data.audit.entries} entries, hash chain verified.` : `The chain breaks at entry ${data.audit.brokenAt}. Follow the incident response plan.`}</p></div>
+      <div className={`grid gap-2 rounded-xl p-4 ${data.maintenance.on ? 'bg-orange/15' : 'bg-[#eef1f5]'}`}>
+        <b>Maintenance mode: {data.maintenance.on ? 'ON' : 'off'}</b>
+        {data.maintenance.on ? <><p className="text-[13px]">Turned on by {data.maintenance.by}. Customers see: “{data.maintenance.message || 'DROP is down for a short maintenance break.'}”</p><button className={button} onClick={() => toggle(false)}>Reopen DROP</button></>
+          : <div className="flex gap-2"><input className={input} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Message for customers (optional)" maxLength={200} aria-label="Maintenance message" /><button className="shrink-0 rounded-xl border border-[#cbd0d7] px-4 text-sm font-semibold" onClick={() => toggle(true)}>Turn on</button></div>}
+      </div>
+    </div>
+    <h4 className="font-semibold">Recent security events</h4>
+    {data.events.length === 0 ? <Empty>No security events yet.</Empty> : <ul className="grid gap-2">{data.events.map((e) => <li key={e.id} className="flex flex-wrap items-start gap-3 rounded-xl border border-[#e3e8ef] p-3 text-sm"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${tone[e.severity]}`}>{e.severity}</span><b className="min-w-0 flex-1">{e.type.replace(/_/g, ' ')}<span className="block font-normal text-[12px] text-[#5b6b82]">{Object.entries(e.detail).map(([k, v]) => `${k}: ${v}`).join(' · ')}</span></b><span className="text-[12px] text-[#8a97a8]">{date(e.at)}</span></li>)}</ul>}
+  </div>;
+}

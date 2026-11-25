@@ -6,7 +6,7 @@ import { Counter } from '../motion/Counter';
 import { useLoad, Loading, Empty, Table, type Notify } from './common';
 import { VerificationCentre, VerificationBanner } from './Verification';
 import { VerificationQueue, ExpiringDocuments, AuditLog } from './Compliance';
-import { StaffManager, Notifications } from './Staff';
+import { StaffManager, Notifications, SecurityPanel } from './Staff';
 import { WalletPanel } from './Wallet';
 import { FinanceOverviewPanel, Payouts, CardsAdmin, Ledger } from './Finance';
 import { VERIFICATION_LABEL } from '../lib/api';
@@ -22,7 +22,7 @@ const TABS = {
   compliance: ['Overview', 'Verification queue', 'Expiring documents', 'Audit log', 'Notifications', 'Profile'],
   support: ['Overview', 'Live map', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
   finance: ['Overview', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Bookings', 'Users', 'Notifications', 'Profile'],
-  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications', 'Profile'],
+  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Security', 'Staff', 'Notifications', 'Profile'],
 } as const;
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
@@ -296,6 +296,7 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
       case 'Users': return <AdminUsers notify={onNotice} readOnly={user.role !== 'admin'} />;
       case 'Bookings': return <AdminBookings />;
       case 'Live map': return <FleetMap />;
+      case 'Security': return <SecurityPanel notify={onNotice} />;
       case 'Tickets': return <AdminTickets notify={onNotice} />;
       case 'Enquiries': return <AdminEnquiries notify={onNotice} />;
       default: return null;

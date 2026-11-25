@@ -1,35 +1,30 @@
 import crypto from 'node:crypto';
 import { IS_PROD } from './config.js';
+import * as kv from './kv.js';
 
-/* ---------------- Login throttling per account (SEC-004) ----------------
- * On top of the per-IP limiter: after 5 failed passwords for one email the account is locked for
+/* ---------------- Login throttling per account (SEC-004, SEC-012) ----------------
+ * On top of the per-IP limiter: after 5 failed attempts for one account the account is locked for
  * 15 minutes, doubling up to 4 hours. It applies whether or not the email exists, so it reveals
- * nothing. In memory for now; Phase 4 moves it to Redis so it holds across instances.
+ * nothing. Stored in Redis when configured (shared by all instances), else in memory.
  */
-const fails = new Map(); // key -> { count, until, level }
-const MAX_FAILS = Number(process.env.LOGIN_MAX_FAILS || 5);
+const MAX_FAILS = () => Number(process.env.LOGIN_MAX_FAILS || 5);
 
-export function loginLocked(key) {
-  const f = fails.get(key);
-  if (!f || !f.until) return 0;
-  const left = f.until - Date.now();
-  if (left <= 0) { f.until = 0; f.count = 0; return 0; }
-  return Math.ceil(left / 60_000);
+export async function loginLocked(key) {
+  const left = await kv.ttl(`lock:${key}`);
+  return left > 0 ? Math.ceil(left / 60) : 0;
 }
 
-export function loginFailed(key) {
-  const f = fails.get(key) || { count: 0, until: 0, level: 0 };
-  f.count += 1;
-  if (f.count >= MAX_FAILS) {
-    f.level = Math.min(f.level + 1, 5);
-    f.until = Date.now() + 15 * 60_000 * 2 ** (f.level - 1);
-    f.count = 0;
-  }
-  fails.set(key, f);
+/** Returns true when this failure locked the account. */
+export async function loginFailed(key) {
+  const n = await kv.incr(`fail:${key}`, 15 * 60);
+  if (n < MAX_FAILS()) return false;
+  const level = Math.min(await kv.incr(`lvl:${key}`, 24 * 3600), 5);
+  await kv.set(`lock:${key}`, '1', Math.min(15 * 60 * 2 ** (level - 1), 4 * 3600));
+  await kv.del(`fail:${key}`);
+  return true;
 }
 
-export const loginSucceeded = (key) => fails.delete(key);
-setInterval(() => { const t = Date.now(); for (const [k, f] of fails) if (!f.until && !f.count) fails.delete(k); else if (f.until && f.until < t - 86_400_000) fails.delete(k); }, 3_600_000).unref();
+export const loginSucceeded = (key) => kv.del(`fail:${key}`);
 
 /* ---------------- Breached-password check (SEC-004) ----------------
  * Have I Been Pwned "range" API with k-anonymity: only the first 5 characters of the password's

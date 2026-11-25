@@ -8,7 +8,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "STAFF_MFA=off node --test test/*.test.js"
+    "test": "STAFF_MFA=off node --test test/*.test.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "engines": {
     "node": ">=20"
@@ -22,6 +24,8 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.5.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "rate-limit-redis": "^4.3.1",
+    "redis": "^4.7.1"
   }
 }
