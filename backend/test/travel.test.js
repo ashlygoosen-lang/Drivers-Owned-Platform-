@@ -213,3 +213,14 @@ test('confirm with partner, manifest (staff only, audited), tickets, cancellatio
   assert.ok(rep.data.rows.length >= 1);
   const tb = trialBalance(); assert.equal(tb.debits, tb.credits);
 });
+
+test('a partner balance payment cannot exceed what the group owes', async () => {
+  const route = await setupRoute({ capacity: 2, minimum: 1 });
+  const j = await join(route, day(20), [traveller(90)]);
+  const b = await pay(j.data.booking);
+  await call('POST', `/admin/travel/groups/${b.groupId}/confirm`, { token: admin, body: { partnerReference: 'CC-1' } });
+  const ok = await call('POST', `/admin/travel/groups/${b.groupId}/payout`, { token: admin, body: { amount: 300, kind: 'balance', reference: 'EFT-1' } });
+  assert.equal(ok.status, 201);
+  const over = await call('POST', `/admin/travel/groups/${b.groupId}/payout`, { token: admin, body: { amount: 200, kind: 'balance', reference: 'EFT-2' } });
+  assert.equal(over.status, 400, 'only R100 is still owed');
+});

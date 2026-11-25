@@ -276,7 +276,8 @@ function money(g) {
   const seats = members(g.id).reduce((s, b) => s + b.seats, 0);
   const collected = rands(db.filter('groupBookings', (b) => b.groupId === g.id).reduce((s, b) => s + (b.paidCents || 0) - (b.refundedCents || 0) - (b.feeCents || 0), 0));
   const partnerCost = g.partnerCents != null ? rands(g.partnerCents) : round2(g.bulkRate * seats);
-  return { heldInEscrow: rands(held), collected, partnerCost, profit: g.marginCents != null ? rands(g.marginCents) : round2(collected - partnerCost),
+  // Before confirmation, profit is the expected margin on the seats paid so far (deposits would make collected − cost misleading).
+  return { heldInEscrow: rands(held), collected, partnerCost, profit: g.marginCents != null ? rands(g.marginCents) : round2((g.pricePerPerson - g.bulkRate) * seats), profitFinal: g.marginCents != null,
     paidToPartner: rands(db.filter('partnerPayouts', (p) => p.groupId === g.id).reduce((s, p) => s + p.amountCents, 0)),
     fees: rands(db.filter('groupBookings', (b) => b.groupId === g.id).reduce((s, b) => s + (b.feeCents || 0), 0)) };
 }
@@ -342,6 +343,11 @@ router.post('/admin/travel/groups/:id/payout', write, wrap(async (req, res) => {
   if (!(amount > 0)) throw bad('Enter the amount paid to the partner.');
   const kind = oneOf(req.body?.kind || 'balance', ['deposit', 'balance'], 'Payment type');
   if (kind === 'balance' && !['CONFIRMED_WITH_PARTNER', 'TICKETED', 'COMPLETED'].includes(g.status)) throw bad('Record the balance after the group is confirmed. Use “deposit” for money paid to hold the seats.');
+  if (kind === 'balance') {
+    const paid = db.filter('partnerPayouts', (p) => p.groupId === g.id).reduce((s, p) => s + p.amountCents, 0);
+    const left = (g.partnerCents || 0) - paid;
+    if (cents(amount) > left) throw bad(`That is more than the R${(Math.max(0, left) / 100).toFixed(2)} still owed to the partner for this group.`);
+  }
   const payout = db.insert('partnerPayouts', { id: id(), groupId: g.id, groupRef: g.ref, partnerId: g.partnerId, amountCents: cents(amount), kind, reference: str(req.body?.reference, 'Payment reference', { min: 2, max: 80 }), recordedBy: req.user.id, createdAt: now() });
   recordPartnerPayout(payout);
   audit(req.user, 'travel.partner_paid', g.id, { group: g.ref, amount: String(amount), kind, reference: payout.reference });
