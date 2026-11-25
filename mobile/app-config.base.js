@@ -17,7 +17,7 @@ const PASSENGER_STRINGS = {
 };
 
 module.exports = function makeConfig({ app, name, bundleId, icon }) {
-  const api = (process.env.DROP_API_URL || 'https://drop.example.com').replace(/\/$/, '');
+  const api = (process.env.DROP_API_URL || 'https://drop.co.za').replace(/\/$/, '');
   const host = new URL(api).host;
   const driver = app === 'driver';
   const S = driver ? DRIVER_STRINGS : PASSENGER_STRINGS;

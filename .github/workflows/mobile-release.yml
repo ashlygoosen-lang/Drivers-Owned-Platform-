@@ -1,0 +1,133 @@
+name: Mobile release builds
+
+# Builds DROP (passenger) and DROP Driver for release. Run it from Actions → "Mobile release builds" → Run workflow.
+#  android: release APK (install on phones to test) and AAB (upload to Google Play) for both apps, built on
+#           GitHub's runners. Signed with your Play upload key when the ANDROID_UPLOAD_* secrets are set;
+#           otherwise signed with a debug key, which works on phones but Google Play refuses.
+#  eas:     iOS and Android store builds through Expo Application Services, when EXPO_TOKEN is set and the
+#           repository variable EAS_ENABLED is "true" (needs an Expo account and Apple/Google developer accounts).
+# Settings: see docs/09-mobile-release.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'API and website address the apps use'
+        required: true
+        default: 'https://drop.co.za'
+      version_name:
+        description: 'Version shown in the stores'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release
+  cancel-in-progress: false
+
+jobs:
+  android:
+    name: Android ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passenger, driver]
+    env:
+      DROP_API_URL: ${{ inputs.api_url }}
+      DROP_API_PINS: ${{ vars.DROP_API_PINS }}
+      GOOGLE_CLOUD_PROJECT_NUMBER: ${{ vars.GOOGLE_CLOUD_PROJECT_NUMBER }}
+      EAS_PROJECT_ID: ${{ matrix.app == 'driver' && vars.EAS_PROJECT_ID_DRIVER || vars.EAS_PROJECT_ID_PASSENGER }}
+      GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+      DROP_VERSION_NAME: ${{ inputs.version_name }}
+      # Google Play needs a higher number for every upload; the run number always increases.
+      DROP_VERSION_CODE: ${{ github.run_number }}
+      DROP_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+      DROP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+      DROP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+      NODE_ENV: production
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+      - name: Check types and tests
+        working-directory: mobile
+        run: npm run typecheck && npm test -- --ci
+      - name: Generate the native Android project
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Upload key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "DROP_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_UPLOAD_KEYSTORE_BASE64 secret: building a debug-signed test build (Google Play will refuse it)."
+          fi
+      - name: Signing and version
+        working-directory: mobile
+        run: node scripts/android-release-signing.js apps/${{ matrix.app }}/android
+      - name: Build APK and AAB
+        working-directory: mobile/apps/${{ matrix.app }}/android
+        run: |
+          echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> gradle.properties
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
+      - name: Name the files
+        id: out
+        run: |
+          label=$([ "${{ matrix.app }}" = driver ] && echo DROP-Driver || echo DROP)
+          signed=$([ -n "$DROP_UPLOAD_STORE_FILE" ] && echo release || echo test-signed)
+          mkdir -p "$RUNNER_TEMP/out"
+          base="mobile/apps/${{ matrix.app }}/android/app/build/outputs"
+          cp "$base/apk/release/app-release.apk" "$RUNNER_TEMP/out/$label-$DROP_VERSION_NAME-$DROP_VERSION_CODE-$signed.apk"
+          cp "$base/bundle/release/app-release.aab" "$RUNNER_TEMP/out/$label-$DROP_VERSION_NAME-$DROP_VERSION_CODE-$signed.aab"
+          ( cd "$RUNNER_TEMP/out" && sha256sum * > SHA256SUMS.txt && ls -la )
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.app }}
+          path: ${{ runner.temp }}/out/
+          retention-days: 30
+      - name: Remove the upload key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks"
+
+  eas:
+    name: Store builds (Expo, iOS + Android)
+    if: vars.EAS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passenger, driver]
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - working-directory: mobile
+        run: npm ci
+      - name: Queue the store builds on Expo (results appear on expo.dev and, with auto-submit, in the stores)
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: npx --yes eas-cli@latest build --platform all --profile production --non-interactive --no-wait --auto-submit
