@@ -51,3 +51,21 @@ export function recordRefund(booking, { reference, amountCents }) {
     meta: { bookingId: booking.id, bookingRef: booking.ref, reference },
   });
 }
+
+/** Monthly plan paid up front: the whole period's fares are held in escrow until each trip is driven. */
+export function recordPlanPayment(plan, { reference, amountCents }) {
+  return post({
+    type: 'plan.payment_received', key: `plan-payment:${reference}`, memo: `Paystack payment for monthly plan ${plan.ref}`,
+    lines: [{ account: 'pool', dr: amountCents }, { account: 'escrow', cr: amountCents }],
+    meta: { planId: plan.id, planRef: plan.ref, reference, provider: 'Paystack' },
+  });
+}
+
+/** Unused part of a monthly plan returned to the card when the period closes. */
+export function recordPlanRefund(plan, { reference, amountCents }) {
+  return post({
+    type: 'plan.refunded', key: `plan-refund:${plan.id}`, memo: `Refund of unused trips, monthly plan ${plan.ref}`,
+    lines: [{ account: 'escrow', dr: amountCents }, { account: 'pool', cr: amountCents }],
+    meta: { planId: plan.id, planRef: plan.ref, reference },
+  });
+}

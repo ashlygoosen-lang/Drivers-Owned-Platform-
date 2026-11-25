@@ -8,6 +8,7 @@ import { issueSession } from '../sessions.js';
 import { createUser } from './auth.js';
 import { sameWorld } from '../demoPolicy.js';
 import { requestsFor } from '../dispatch.js';
+import { scholarEligibility } from '../plans.js';
 import { getLocation } from '../tracking/locations.js';
 import { view } from './bookings.js';
 import { transition, ACTIVE } from '../bookingState.js';
@@ -107,6 +108,7 @@ router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (r
   approved(req);
   const booking = await db.byIdFresh('bookings', req.params.id);
   if (!booking || booking.status !== 'requested' || !sameWorld(req.user, db.byId('users', booking.userId))) throw new HttpError(409, 'This request is no longer available.');
+  if (booking.requiresScholarVetting && !scholarEligibility(req.user.id).eligible) throw new HttpError(403, 'This is a scholar-transport trip. It needs a driver with approved child-protection and learner-transport documents.');
   if (db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status))) {
     throw bad('Finish your current trip before accepting another.');
   }

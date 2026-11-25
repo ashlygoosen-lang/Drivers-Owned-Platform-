@@ -2,6 +2,7 @@ import { db } from './db.js';
 import { allLocations } from './tracking/locations.js';
 import { distanceKm, locate } from './tracking/geo.js';
 import { sameWorld } from './demoPolicy.js';
+import { scholarEligibility, sastDate, sastTime } from './plans.js';
 
 /**
  * Proximity dispatch (Phase 6B-2).
@@ -67,6 +68,12 @@ async function build() {
     if (b.status === 'requested') open.push(b);
     else if (b.driverId && ACTIVE.includes(b.status)) busy.add(b.driverId);
   }
+  // Drivers with a monthly-plan trip in the next 75 minutes are kept free for it (no on-demand offers).
+  const today = sastDate();
+  for (const p of db.all('plans')) {
+    if (p.status !== 'active' || !p.driverId || !p.pricing?.dates?.includes(today) || (p.skipDates || []).includes(today)) continue;
+    if (p.legs.some((l) => { const dt = sastTime(today, l.time) - Date.now(); return dt > 0 && dt < 75 * 60_000; })) busy.add(p.driverId);
+  }
   const offers = new Map(); // driverId -> [{ id, km }]
   const everyone = new Set(); // booking ids shown to all online drivers
   const unlocated = new Set(); // booking ids also shown to drivers without a location
@@ -85,6 +92,8 @@ async function build() {
     }
   }
   open.sort((x, y) => ageMin(y) - ageMin(x)); // oldest first: longest-waiting passengers get the nearest drivers
+  const vettedCache = new Map();
+  const vetted = (driverId) => { if (!vettedCache.has(driverId)) vettedCache.set(driverId, scholarEligibility(driverId).eligible); return vettedCache.get(driverId); };
   for (const b of open) {
     ensurePickup(b);
     const age = ageMin(b);
@@ -101,6 +110,7 @@ async function build() {
     for (let di = -rings; di <= rings; di++) for (let dj = -rings; dj <= rings; dj++) {
       for (const d of grid.get(`${ci + di}:${cj + dj}`) || []) {
         if (!sameWorld(d.user, passenger) || (offers.get(d.id)?.length || 0) >= c.perDriver) continue;
+        if (b.requiresScholarVetting && !vetted(d.id)) continue;
         const km = distanceKm(p, d);
         if (km <= radius) found.push({ id: d.id, km });
       }
@@ -136,6 +146,7 @@ export async function requestsFor(driver, location) {
   for (const b of p.open) {
     const fresh = db.byId('bookings', b.id);
     if (!fresh || fresh.status !== 'requested' || !sameWorld(driver, db.byId('users', fresh.userId))) continue;
+    if (fresh.requiresScholarVetting && !scholarEligibility(driver.id).eligible) continue; // learners: vetted drivers only
     if (mine.has(b.id) || p.everyone.has(b.id) || (!located && p.unlocated.has(b.id))) {
       const km = mine.get(b.id) ?? (located && fresh.pickupLoc ? Math.round(distanceKm(location, fresh.pickupLoc) * 10) / 10 : null);
       out.push({ booking: fresh, km });

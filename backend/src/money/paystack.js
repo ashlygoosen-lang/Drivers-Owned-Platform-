@@ -41,8 +41,9 @@ export function verify(reference) {
   return request('GET', `/transaction/verify/${encodeURIComponent(reference)}`);
 }
 
-export function refund(reference) {
-  return request('POST', '/refund', { transaction: reference });
+/** Full refund, or a partial one when amountCents is given (e.g. unused days of a monthly plan). */
+export function refund(reference, amountCents) {
+  return request('POST', '/refund', { transaction: reference, ...(amountCents && { amount: amountCents }) });
 }
 
 /** Paystack signs webhooks with HMAC-SHA512 of the raw body using the secret key. */

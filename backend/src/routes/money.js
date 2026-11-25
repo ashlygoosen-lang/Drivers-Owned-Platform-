@@ -9,9 +9,10 @@ import { withLock } from '../lock.js';
 // wait BANK_CHANGE_HOLD_HOURS, so a stolen session can't redirect a driver's earnings straight away.
 const BANK_HOLD_H = () => Number(process.env.BANK_CHANGE_HOLD_HOURS ?? 24);
 import { COMPANY } from '../config.js';
-import { encryptText, decryptText, getVerification, recompute, audit, revealIdNumber } from '../kyc.js';
+import { encryptText, decryptText, getVerification, recompute, audit, revealIdNumber, notify } from '../kyc.js';
 import { post, cents, rands, balance, walletAccount, walletBalance, statement, trialBalance } from '../money/ledger.js';
-import { recordCardPayment, recordRefund } from '../money/settlement.js';
+import { recordCardPayment, recordRefund, recordPlanPayment } from '../money/settlement.js';
+import { addHistory as planHistory, KINDS as PLAN_KINDS } from '../plans.js';
 import * as paystack from '../money/paystack.js';
 import { PTY, cardsEnabled, isSandbox, checksum, terminalId } from '../money/paymentology/config.js';
 import * as pty from '../money/paymentology/client.js';
@@ -49,6 +50,25 @@ async function markPaid(bookingIn, tx) {
   });
 }
 
+/** A monthly plan's card payment succeeded: hold it in escrow and open the plan for drivers (or start it). */
+export async function markPlanPaid(planIn, tx) {
+  return withLock(`pay:${planIn.id}`, async () => {
+    const plan = db.byId('plans', planIn.id);
+    if (plan.paymentStatus === 'paid') return plan;
+    if (tx.status !== 'success') throw bad('This payment was not successful.');
+    const amount = Number(tx.amount);
+    if (amount !== cents(plan.pricing.total) || String(tx.currency).toUpperCase() !== 'ZAR') throw bad('The payment amount does not match this plan. Please contact support.');
+    recordPlanPayment(plan, { reference: tx.reference, amountCents: amount });
+    db.insert('payments', { id: id(), planId: plan.id, userId: plan.userId, provider: 'Paystack', reference: tx.reference, amount, status: 'paid', channel: tx.channel, cardLast4: tx.authorization?.last4 || '', paidAt: tx.paid_at || now(), createdAt: now() });
+    const next = plan.driverId ? 'active' : 'awaiting_driver';
+    const updated = (await db.updateStrict('plans', plan.id, { paymentStatus: 'paid', paymentReference: tx.reference, status: plan.status === 'awaiting_payment' ? next : plan.status, history: planHistory(plan, next, 'Paid by card') },
+      { when: { paymentStatus: ['pending', null] } })) || db.byId('plans', plan.id);
+    if (updated.status === 'awaiting_driver') (await import('./plans.js')).notifyDriversOfPlan(updated);
+    notify(plan.userId, `Payment received for ${plan.ref}`, `R${plan.pricing.total.toFixed(2)} for your ${PLAN_KINDS[plan.kind].toLowerCase()} from ${plan.startDate} to ${plan.endDate}. Unused days are refunded at month end.`, 'plans');
+    return updated;
+  });
+}
+
 router.post('/payments/bookings/:id/checkout', requireAuth, wrap(async (req, res) => {
   if (!paystack.paystackEnabled()) throw bad('Card payments are not available yet. Please choose cash.');
   const found = await db.byIdFresh('bookings', req.params.id);
@@ -70,7 +90,13 @@ router.get('/payments/verify/:reference', requireAuth, wrap(async (req, res) => 
   const ref = String(req.params.reference);
   const found = (await db.faultIn('bookings', 'pendingPaymentReference', ref)) || (await db.faultIn('bookings', 'paymentReference', ref));
   const booking = found?.userId === req.user.id ? found : undefined;
-  if (!booking) throw new HttpError(404, 'Payment not found.');
+  if (!booking) {
+    const plan = db.find('plans', (p) => (p.pendingPaymentReference === ref || p.paymentReference === ref) && p.userId === req.user.id);
+    if (!plan) throw new HttpError(404, 'Payment not found.');
+    if (plan.paymentStatus === 'paid') return res.json({ planId: plan.id, paid: true });
+    const updated = await markPlanPaid(plan, await paystack.verify(ref));
+    return res.json({ planId: updated.id, paid: true });
+  }
   if (booking.paymentStatus === 'paid') return res.json({ booking, paid: true });
   const tx = await paystack.verify(ref);
   const updated = await markPaid(booking, tx);
@@ -90,6 +116,10 @@ export function paystackWebhook() {
       const ref = event.data?.reference;
       const booking = (await db.faultIn('bookings', 'pendingPaymentReference', ref)) || (await db.faultIn('bookings', 'paymentReference', ref));
       if (booking) await markPaid(booking, event.data);
+      else {
+        const plan = db.find('plans', (p) => p.pendingPaymentReference === ref || p.paymentReference === ref);
+        if (plan) await markPlanPaid(plan, event.data);
+      }
     } catch (err) { console.error('[drop] paystack webhook', err.message); }
   });
   return r;
@@ -98,6 +128,8 @@ export function paystackWebhook() {
 /** Refund a paid booking that was cancelled before the trip. Called from the cancel route. */
 export async function refundBooking(booking) {
   if (booking.paymentStatus !== 'paid') return booking;
+  // A trip of a prepaid monthly plan is refunded with the plan's other unused trips when the period closes.
+  if (booking.planId) return db.update('bookings', booking.id, { paymentStatus: 'plan_refund' });
   try {
     await paystack.refund(booking.paymentReference);
     recordRefund(booking, { reference: booking.paymentReference, amountCents: cents(booking.fare) });

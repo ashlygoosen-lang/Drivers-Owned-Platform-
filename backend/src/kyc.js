@@ -25,12 +25,14 @@ export const DOC_TYPES = {
   roadworthy: { label: 'Roadworthy certificate', hint: 'Recommended. Valid roadworthy certificate for the vehicle.', expires: true },
   operating_licence: { label: 'E-hailing operating licence', hint: 'Recommended. Provincial operating licence or proof of application.', expires: true },
   police_clearance: { label: 'Police clearance certificate', hint: 'Recommended. SAPS clearance certificate issued within the last 6 months.', expires: false },
+  child_protection_clearance: { label: 'Child-protection clearance', hint: 'For scholar transport. Results of the checks against the National Child Protection Register (Children’s Act s 126) and the National Register for Sex Offenders, issued within the last 12 months.', expires: true },
+  learner_transport_licence: { label: 'Learner transport operating licence', hint: 'For scholar transport. Operating licence (or authority) to transport learners, issued by the provincial or municipal regulatory entity.', expires: true },
   company_registration: { label: 'Company registration (CIPC)', hint: 'CIPC registration certificate (CoR14.3) for the business.', expires: false },
 };
 
 export const REQUIREMENTS = {
   passenger: { required: ['id_document', 'proof_of_address'], optional: [] },
-  driver: { required: ['id_document', 'proof_of_address', 'selfie', 'drivers_licence', 'prdp', 'vehicle_registration', 'vehicle_insurance'], optional: ['roadworthy', 'operating_licence', 'police_clearance'] },
+  driver: { required: ['id_document', 'proof_of_address', 'selfie', 'drivers_licence', 'prdp', 'vehicle_registration', 'vehicle_insurance'], optional: ['roadworthy', 'operating_licence', 'police_clearance', 'child_protection_clearance', 'learner_transport_licence'] },
   business: { required: ['id_document', 'proof_of_address', 'company_registration'], optional: [] },
 };
 

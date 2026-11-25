@@ -26,8 +26,8 @@ import { DATA_DIR, UPLOAD_DIR } from './config.js';
  *     see every committed write.
  */
 const FILE = path.join(DATA_DIR, 'drop-db.json');
-const COLLECTIONS = ['users', 'bookings', 'applications', 'tickets', 'enquiries', 'verifications', 'ledger', 'cards', 'cardEvents', 'withdrawals', 'payments', 'notifications', 'audit', 'messages', 'calls', 'sessions', 'devices', 'passwordResets', 'attestKeys', 'securityEvents', 'settings'];
-const COUNTER_START = { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0 };
+const COLLECTIONS = ['users', 'bookings', 'applications', 'tickets', 'enquiries', 'verifications', 'ledger', 'cards', 'cardEvents', 'withdrawals', 'payments', 'notifications', 'audit', 'messages', 'calls', 'sessions', 'devices', 'passwordResets', 'attestKeys', 'securityEvents', 'settings', 'plans'];
+const COUNTER_START = { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0, plan: 1000 };
 
 /*
  * Hot-data window (Phase 6B-1, PostgreSQL mode only). Each server keeps in memory only what is live

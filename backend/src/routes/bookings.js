@@ -53,7 +53,7 @@ export function view(b, viewer) {
   return out;
 }
 
-function verificationGate(user) {
+export function verificationGate(user) {
   if (PASSENGER_VERIFICATION === 'off') return;
   if (!['passenger', 'business'].includes(user.role)) throw new HttpError(403, 'Please book from a passenger or business account.');
   const v = getVerification(user.id);
