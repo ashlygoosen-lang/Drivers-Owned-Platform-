@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import express from 'express';
 import { db, id, now, nextRef } from '../db.js';
-import { requireAuth, requireRole } from '../auth.js';
+import { requireAuth, requireRole, checkPassword } from '../auth.js';
+import { isDemoUser } from '../demoPolicy.js';
+
+// SEC-006: changing the payout bank account needs the password, and withdrawals to a changed account
+// wait BANK_CHANGE_HOLD_HOURS, so a stolen session can't redirect a driver's earnings straight away.
+const BANK_HOLD_H = () => Number(process.env.BANK_CHANGE_HOLD_HOURS ?? 24);
 import { COMPANY } from '../config.js';
 import { encryptText, decryptText, getVerification, recompute, audit } from '../kyc.js';
 import { post, cents, rands, balance, walletAccount, walletBalance, statement, trialBalance } from '../money/ledger.js';
@@ -120,7 +125,7 @@ router.get('/wallet', driverOnly, (req, res) => {
     declined,
     card: publicCard(card),
     cardProgramme: { enabled: cardsEnabled(), sandbox: isSandbox(), name: PTY.programme, limits: { perTransaction: rands(POLICY.maxTransaction), daily: rands(POLICY.dailyLimit), spentToday: rands(spendToday), atm: POLICY.allowAtm } },
-    bankAccount: u.bankAccount ? { holder: u.bankAccount.holder, bank: u.bankAccount.bank, branchCode: u.bankAccount.branchCode, accountType: u.bankAccount.accountType, masked: u.bankAccount.masked } : null,
+    bankAccount: u.bankAccount ? { holder: u.bankAccount.holder, bank: u.bankAccount.bank, branchCode: u.bankAccount.branchCode, accountType: u.bankAccount.accountType, masked: u.bankAccount.masked, holdUntil: u.bankAccount.holdUntil || null } : null,
     withdrawals: db.filter('withdrawals', (w) => w.userId === u.id).slice(-20).reverse().map(({ accountEnc, ...w }) => ({ ...w, amount: rands(w.amount), fee: rands(w.fee) })),
     rules: { minWithdrawal: rands(WITHDRAWAL.min), withdrawalFee: rands(WITHDRAWAL.fee), cashDebtLimit: rands(WITHDRAWAL.cashDebtLimit) },
     banks: BANKS,
@@ -129,6 +134,8 @@ router.get('/wallet', driverOnly, (req, res) => {
 
 router.put('/wallet/bank-account', driverOnly, wrap(async (req, res) => {
   const b = req.body || {};
+  if (!isDemoUser(req.user) && !(await checkPassword(String(b.currentPassword || ''), req.user.passwordHash))) throw bad('Enter your DROP password to change your bank account.');
+  const previous = db.find('users', (x) => x.id === req.user.id).bankAccount;
   const accountNumber = String(b.accountNumber || '').replace(/\s/g, '');
   if (!/^\d{6,16}$/.test(accountNumber)) throw bad('Account numbers contain 6 to 16 digits.');
   const branchCode = String(b.branchCode || '').replace(/\s/g, '');
@@ -137,16 +144,18 @@ router.put('/wallet/bank-account', driverOnly, wrap(async (req, res) => {
   const v = getVerification(req.user.id); recompute(v);
   const legal = (v.profile?.legalName || '').toLowerCase().replace(/[^a-z]/g, '');
   const holderKey = holder.toLowerCase().replace(/[^a-z]/g, '');
-  const bankAccount = { holder, bank: oneOf(b.bank, BANKS, 'Bank'), branchCode, accountType: oneOf(b.accountType || 'Cheque', ['Cheque', 'Savings', 'Transmission'], 'Account type'), accountEnc: encryptText(accountNumber), masked: maskAcc(accountNumber), nameMatchesId: Boolean(legal && legal.slice(-6) && holderKey.includes(legal.slice(-6))), updatedAt: now() };
+  const bankAccount = { holder, bank: oneOf(b.bank, BANKS, 'Bank'), branchCode, accountType: oneOf(b.accountType || 'Cheque', ['Cheque', 'Savings', 'Transmission'], 'Account type'), accountEnc: encryptText(accountNumber), masked: maskAcc(accountNumber), nameMatchesId: Boolean(legal && legal.slice(-6) && holderKey.includes(legal.slice(-6))), updatedAt: now(), holdUntil: previous && !isDemoUser(req.user) ? new Date(Date.now() + BANK_HOLD_H() * 3_600_000).toISOString() : null };
+  audit(req.user, previous ? 'bank_account_changed' : 'bank_account_added', req.user.id, { bank: bankAccount.bank, account: bankAccount.masked });
   db.update('users', req.user.id, { bankAccount });
   db.insert('notifications', { id: id(), userId: req.user.id, title: 'Bank account updated', body: `Withdrawals will now go to ${bankAccount.bank} ${bankAccount.masked}. If this wasn’t you, contact support immediately.`, link: 'wallet', read: false, createdAt: now() });
-  res.json({ bankAccount: { holder, bank: bankAccount.bank, branchCode, accountType: bankAccount.accountType, masked: bankAccount.masked } });
+  res.json({ bankAccount: { holder, bank: bankAccount.bank, branchCode, accountType: bankAccount.accountType, masked: bankAccount.masked, holdUntil: bankAccount.holdUntil } });
 }));
 
 router.post('/wallet/withdrawals', driverOnly, wrap(async (req, res) => {
   const u = db.find('users', (x) => x.id === req.user.id);
   if (u.verificationStatus !== 'verified') throw bad('Your account must be verified before you can withdraw.');
   if (!u.bankAccount) throw bad('Add your bank account first.');
+  if (u.bankAccount.holdUntil && Date.parse(u.bankAccount.holdUntil) > Date.now()) throw bad(`For your security, withdrawals to a newly changed bank account start ${new Date(u.bankAccount.holdUntil).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`);
   const amount = cents(req.body?.amount);
   if (!Number.isFinite(amount) || amount < WITHDRAWAL.min) throw bad(`The minimum withdrawal is R ${rands(WITHDRAWAL.min)}.`);
   const total = amount + WITHDRAWAL.fee;

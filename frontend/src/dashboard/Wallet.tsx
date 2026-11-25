@@ -71,15 +71,16 @@ export function WalletPanel({ notify }: { notify: Notify }) {
 
     <section className="rounded-2xl border border-[#e3e8ef] p-5">
       <div className="mb-3 flex items-center justify-between"><h4 className="font-display text-lg font-extrabold">Bank account</h4>{w.bankAccount && !editBank && <button className="text-sm font-semibold underline" onClick={() => setEditBank(true)}>Change</button>}</div>
-      {w.bankAccount && !editBank ? <p className="text-sm">{w.bankAccount.holder} · {w.bankAccount.bank} {w.bankAccount.accountType} {w.bankAccount.masked} · branch {w.bankAccount.branchCode}</p> :
+      {w.bankAccount && !editBank ? <p className="text-sm">{w.bankAccount.holder} · {w.bankAccount.bank} {w.bankAccount.accountType} {w.bankAccount.masked} · branch {w.bankAccount.branchCode}{w.bankAccount.holdUntil && Date.parse(w.bankAccount.holdUntil) > Date.now() && <span className="mt-1 block text-[12px] text-[#8a3a00]">New account: withdrawals open {new Date(w.bankAccount.holdUntil).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</span>}</p> :
         <form className="grid gap-4 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void act('bank', () => api('/wallet/bank-account', { method: 'PUT', body: f }).then(() => setEditBank(false)), 'Bank account saved.'); }}>
           <Field label="Account holder" hint="Must be you, as on your ID"><input name="holder" required className={input} autoComplete="name" /></Field>
           <Field label="Bank"><select name="bank" required className={input} defaultValue="">{[<option key="" value="" disabled>Choose…</option>, ...w.banks.map((b) => <option key={b}>{b}</option>)]}</select></Field>
           <Field label="Account number"><input name="accountNumber" required inputMode="numeric" className={input} autoComplete="off" /></Field>
           <Field label="Branch code" hint="Universal branch code, 6 digits"><input name="branchCode" required inputMode="numeric" maxLength={6} className={input} /></Field>
           <Field label="Account type"><select name="accountType" className={input}><option>Cheque</option><option>Savings</option><option>Transmission</option></select></Field>
+          {!user?.demo && <Field label="Your DROP password" hint="Confirms it’s really you"><input name="currentPassword" type="password" required autoComplete="current-password" className={input} /></Field>}
           <div className="flex items-end gap-3"><button className={button} disabled={!!busy}>Save bank account</button>{editBank && <button type="button" className="text-sm underline" onClick={() => setEditBank(false)}>Cancel</button>}</div>
-          <p className="text-[12px] text-[#5b6b82] md:col-span-2">Your account number is encrypted. You’ll get a notification whenever it changes.</p>
+          <p className="text-[12px] text-[#5b6b82] md:col-span-2">Your account number is encrypted. You’ll get a notification whenever it changes, and for your security withdrawals to a changed account start after 24 hours.</p>
         </form>}
     </section>
 
