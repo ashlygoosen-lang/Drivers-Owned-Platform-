@@ -15,6 +15,7 @@ import { Intro } from './motion/Intro';
 import { useDropMotion, useScrollProgress, useScrollSpy } from './motion/useDropMotion';
 import { BrandPage } from './brand/BrandPage';
 import { CommsProvider } from './lib/comms';
+import { PrivacyPage, TermsPage, DeleteAccountPage } from './legal/LegalPage';
 
 const services = [
   { name: 'Ride' as Service, tag: 'EVERYDAY, ELEVATED', description: 'Your everyday journey. A better way to get there.', icon: 'car' as IconName, image: '/images/drop-hero.webp', alt: 'Professional driver beside a premium SUV in Cape Town', features: ['Instant & scheduled rides', 'Upfront fare estimates', 'Card or cash, paid to your driver'] },
@@ -284,5 +285,8 @@ function Page() {
 
 export default function App() {
   if (/^\/brand\/?$/.test(window.location.pathname)) return <BrandPage />;
+  if (/^\/privacy\/?$/.test(window.location.pathname)) return <PrivacyPage />;
+  if (/^\/terms\/?$/.test(window.location.pathname)) return <TermsPage />;
+  if (/^\/delete-account\/?$/.test(window.location.pathname)) return <DeleteAccountPage />;
   return <AuthProvider><Page /></AuthProvider>;
 }
