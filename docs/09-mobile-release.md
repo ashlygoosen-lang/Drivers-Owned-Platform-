@@ -6,7 +6,7 @@ Both apps (DROP and DROP Driver) are built by GitHub. Go to **Actions → Mobile
 
 | File | What it's for |
 |---|---|
-| `DROP-1.0.0-<n>-….apk`, `DROP-Driver-1.0.0-<n>-….apk` | Install directly on Android phones for testing |
+| `DROP-1.0.0-<n>-…-arm64-v8a.apk`, `DROP-Driver-…-arm64-v8a.apk` | Install directly on Android phones for testing (arm64 fits almost every current phone; `armeabi-v7a` is for older phones, `x86_64` for emulators and Chromebooks) |
 | `DROP-1.0.0-<n>-….aab`, `DROP-Driver-1.0.0-<n>-….aab` | Upload to Google Play Console |
 | `SHA256SUMS.txt` | Checksums, to confirm the files weren't changed |
 

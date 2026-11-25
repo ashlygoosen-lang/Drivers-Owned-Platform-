@@ -95,7 +95,10 @@ jobs:
           signed=$([ -n "$DROP_UPLOAD_STORE_FILE" ] && echo release || echo test-signed)
           mkdir -p "$RUNNER_TEMP/out"
           base="mobile/apps/${{ matrix.app }}/android/app/build/outputs"
-          cp "$base/apk/release/app-release.apk" "$RUNNER_TEMP/out/$label-$DROP_VERSION_NAME-$DROP_VERSION_CODE-$signed.apk"
+          # arm64-v8a: almost all current phones; armeabi-v7a: older phones; x86_64: emulators and Chromebooks.
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "$base/apk/release/app-$abi-release.apk" "$RUNNER_TEMP/out/$label-$DROP_VERSION_NAME-$DROP_VERSION_CODE-$signed-$abi.apk"
+          done
           cp "$base/bundle/release/app-release.aab" "$RUNNER_TEMP/out/$label-$DROP_VERSION_NAME-$DROP_VERSION_CODE-$signed.aab"
           ( cd "$RUNNER_TEMP/out" && sha256sum * > SHA256SUMS.txt && ls -la )
       - uses: actions/upload-artifact@v4

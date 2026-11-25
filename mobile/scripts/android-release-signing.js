@@ -39,5 +39,19 @@ if (signed) {
   g = g.replace(/signingConfig signingConfigs\.debug/g, (m) => (++n === 2 ? 'signingConfig signingConfigs.release' : m));
   if (n < 2) throw new Error('release signingConfig not found; Expo template changed');
 }
+// Test APKs: one per processor type (much smaller to send to testers); the Play bundle (AAB) is unaffected
+// and still contains every type, from which Google Play delivers each phone only what it needs.
+if (!g.includes('splits {')) {
+  g = g.replace(/(\n    defaultConfig \{)/, `
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a", "armeabi-v7a", "x86_64"
+            universalApk false
+        }
+    }
+$1`);
+}
 fs.writeFileSync(file, g);
 console.log(`Android release: ${signed ? 'signed with the DROP upload key' : 'signed with the DEBUG key (testing only, not for Google Play)'}; versionCode ${env.DROP_VERSION_CODE || 'unchanged'}`);
