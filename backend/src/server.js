@@ -8,7 +8,7 @@ import { startDemoSimulator } from './tracking/simulator.js';
 await seedAdmin();
 await seedDemo();
 if (demoEnabled()) startDemoSimulator(); // moves the demo driver's car on the live map
-if (demoEnabled()) console.warn('[drop] DEMO MODE IS ON: one-click demo logins are available. Set DEMO_MODE=false before real customers use the site.');
+if (demoEnabled()) console.warn('[drop] DEMO MODE IS ON. It switches itself off when the first real customer signs up (demo staff dashboards are never available once real users exist). Set DEMO_MODE=false to turn it off now.');
 const app = createApp();
 const server = app.listen(PORT, () => console.log(`[drop] API listening on :${PORT}${fs.existsSync(FRONTEND_DIST) ? ' (serving frontend)' : ''}`));
 const shutdown = () => server.close(async () => { await db.flush(); process.exit(0); });

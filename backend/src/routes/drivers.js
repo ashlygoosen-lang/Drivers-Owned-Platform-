@@ -5,6 +5,7 @@ import { settleTrip } from '../money/settlement.js';
 import { walletBalance, cents } from '../money/ledger.js';
 import { optionalAuth, requireRole, signToken, publicUser } from '../auth.js';
 import { createUser } from './auth.js';
+import { sameWorld } from '../demoPolicy.js';
 import { view, setStatus } from './bookings.js';
 import { str, email, phone, password, oneOf, int, wrap, bad, HttpError } from '../validate.js';
 
@@ -90,7 +91,8 @@ router.get('/drivers/requests', requireRole('driver'), wrap(async (req, res) => 
   const me = db.find('users', (u) => u.id === req.user.id);
   if (me.driverStatus !== 'approved' || !me.online) return res.json({ requests: [], active: null });
   const active = db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status));
-  const requests = db.filter('bookings', (b) => b.status === 'requested').slice(-20).reverse();
+  const passengerOf = (b) => db.find('users', (u) => u.id === b.userId);
+  const requests = db.filter('bookings', (b) => b.status === 'requested' && sameWorld(me, passengerOf(b))).slice(-20).reverse();
   res.json({ requests: requests.map((b) => view(b, req.user)), active: active ? view(active, req.user) : null });
 }));
 
@@ -99,7 +101,7 @@ const NEXT = { accepted: 'arriving', arriving: 'in_progress', in_progress: 'comp
 router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (req, res) => {
   approved(req);
   const booking = db.find('bookings', (b) => b.id === req.params.id);
-  if (!booking || booking.status !== 'requested') throw new HttpError(409, 'This request is no longer available.');
+  if (!booking || booking.status !== 'requested' || !sameWorld(req.user, db.find('users', (u) => u.id === booking.userId))) throw new HttpError(409, 'This request is no longer available.');
   if (db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status))) {
     throw bad('Finish your current trip before accepting another.');
   }

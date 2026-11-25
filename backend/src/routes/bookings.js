@@ -9,6 +9,7 @@ import { paystackEnabled } from '../money/paystack.js';
 import { phoneMode } from '../comms/phone.js';
 import { commsOpen, onTripStatus } from './comms.js';
 import { onTrackingStatus, tripPoints } from './tracking.js';
+import { sameWorld } from '../demoPolicy.js';
 
 const router = Router();
 const SERVICES = Object.keys(CATEGORIES);
@@ -123,7 +124,7 @@ function load(req) {
   if (!booking) throw new HttpError(404, 'Booking not found.');
   const u = req.user;
   const allowed = u.role === 'admin' || booking.userId === u.id || booking.driverId === u.id
-    || (u.role === 'driver' && booking.status === 'requested');
+    || (u.role === 'driver' && booking.status === 'requested' && sameWorld(u, db.find('users', (x) => x.id === booking.userId)));
   if (!allowed) throw new HttpError(404, 'Booking not found.');
   return booking;
 }

@@ -16,8 +16,8 @@ import { quote } from './pricing.js';
 import { post, cents, walletAccount } from './money/ledger.js';
 import { recordCardPayment, settleTrip } from './money/settlement.js';
 
-export const demoEnabled = () => String(process.env.DEMO_MODE || 'true').toLowerCase() !== 'false';
-export const DEMO_DOMAIN = 'demo.drop.co.za';
+import { demoEnabled, DEMO_DOMAIN, isDemoUser, demoRoleAllowed } from './demoPolicy.js';
+export { demoEnabled, DEMO_DOMAIN, isDemoUser, demoRoleAllowed };
 
 export const DEMO_ACCOUNTS = [
   { role: 'passenger', email: `passenger@${DEMO_DOMAIN}`, name: 'Lerato Mokoena', title: 'Passenger', blurb: 'Book rides, track trips, verification done.' },
@@ -29,7 +29,6 @@ export const DEMO_ACCOUNTS = [
   { role: 'finance', email: `finance@${DEMO_DOMAIN}`, name: 'Fiona van Wyk', title: 'Finance', blurb: 'Pool account, payouts, cards, ledger.' },
 ];
 
-export const isDemoUser = (u) => Boolean(u?.email?.endsWith(`@${DEMO_DOMAIN}`));
 
 /* ---------- sample documents (clearly marked as demo) ---------- */
 function demoPdf(title) {
