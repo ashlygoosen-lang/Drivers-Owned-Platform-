@@ -17,11 +17,11 @@ const { db } = await import('../src/db.js');
 let server, base;
 
 before(async () => {
-  await seedAdmin();
+  await (await import('../src/db.js')).initDb(); await seedAdmin();
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
-after(async () => { server.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+after(async () => { server.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 async function call(method, url, { token, body, form } = {}) {
   const headers = {};

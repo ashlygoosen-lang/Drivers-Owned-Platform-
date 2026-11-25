@@ -16,7 +16,7 @@ function load(userId) {
 }
 
 function summary(v) {
-  const u = db.find('users', (x) => x.id === v.userId);
+  const u = db.byId('users', v.userId);
   const docs = currentDocs(v);
   return {
     userId: v.userId, role: v.role, status: v.status, submittedAt: v.submittedAt, decidedAt: v.decidedAt,
@@ -39,7 +39,7 @@ router.get('/compliance/queue', staff, (req, res) => {
 
 router.get('/compliance/verifications/:userId', staff, wrap(async (req, res) => {
   const v = load(req.params.userId);
-  const user = db.find('users', (u) => u.id === v.userId);
+  const user = db.byId('users', v.userId);
   const application = db.filter('applications', (a) => a.userId === v.userId).pop() || null;
   audit(req.user, 'verification.viewed', v.userId);
   res.json({ verification: present(v, { reveal: true }), user: publicUser(user), application, archived: v.documents.filter((d) => d.archived).map(({ file, ...d }) => d) });
@@ -105,7 +105,7 @@ router.get('/compliance/expiring', staff, (req, res) => {
   const out = [];
   for (const v of db.all('verifications')) {
     recompute(v);
-    const u = db.find('users', (x) => x.id === v.userId);
+    const u = db.byId('users', v.userId);
     for (const d of currentDocs(v)) {
       if (d.expiresAt && d.expiresAt <= limit && ['approved', 'expired'].includes(d.status)) {
         out.push({ userId: v.userId, name: v.profile?.legalName || u?.name, email: u?.email, role: v.role, type: d.type, label: DOC_TYPES[d.type].label, expiresAt: d.expiresAt, status: d.status });

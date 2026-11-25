@@ -37,10 +37,9 @@ async function alert(text) {
 /** Record a security-relevant event. severity: info | medium | high */
 export function securityEvent(type, detail = {}, severity = 'info') {
   const e = { id: id(), type, severity, detail, at: now() };
+  db.insert('securityEvents', e);
   const list = db.all('securityEvents');
-  list.push(e);
-  if (list.length > 5000) list.splice(0, list.length - 5000);
-  db.save();
+  if (list.length > 5500) { const cut = list[list.length - 5000].at; db.remove('securityEvents', (x) => x.at < cut); }
   log(severity === 'high' ? 'warn' : 'info', `security.${type}`, { severity, ...detail });
   if (severity === 'high') void alert(`DROP security alert: ${type} ${JSON.stringify(detail)}`);
   if (['login_failed', 'mfa_failed', 'rate_limited', 'server_error'].includes(type)) count(type);

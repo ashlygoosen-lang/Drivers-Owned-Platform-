@@ -36,8 +36,8 @@ const { db } = await import('../src/db.js');
 const { cborDecode } = await import('../src/attest.js');
 let server, base;
 const call = makeClient(() => base);
-before(async () => { await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(async () => { server.closeAllConnections(); server.close(); stub.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => { await (await import('../src/db.js')).initDb(); await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
+after(async () => { server.closeAllConnections(); server.close(); stub.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test('Forgotten password: generic answer, single-use 30-minute link, signs out every device', async () => {

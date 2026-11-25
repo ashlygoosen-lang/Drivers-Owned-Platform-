@@ -30,8 +30,8 @@ const { createApp, seedAdmin } = await import('../src/app.js');
 const { db } = await import('../src/db.js');
 let server, base;
 const call = makeClient(() => base);
-before(async () => { await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(async () => { server.closeAllConnections(); server.close(); twilio.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => { await (await import('../src/db.js')).initDb(); await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
+after(async () => { server.closeAllConnections(); server.close(); twilio.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 /** Open the live event stream for a user and collect events. */
 async function stream(token) {

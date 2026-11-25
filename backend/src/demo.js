@@ -116,7 +116,7 @@ function makeBooking(passenger, driver, { pickup, destination, category = 'Comfo
     recordCardPayment(booking, { reference, amountCents: cents(o.fare), provider: 'Demo' });
     db.update('bookings', booking.id, { paymentReference: reference });
   }
-  if (status === 'completed' && driver) settleTrip(db.find('bookings', (b) => b.id === booking.id));
+  if (status === 'completed' && driver) settleTrip(db.byId('bookings', booking.id));
   return booking;
 }
 

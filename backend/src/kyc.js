@@ -129,8 +129,8 @@ export function revealIdNumber(profile = {}) {
 /** One-off migration of any plain-text ID numbers already stored. Safe to run on every start. */
 export function migrateIdNumbers() {
   let n = 0;
-  for (const v of db.all('verifications')) if (v.profile?.idNumber) { v.profile = sealIdNumber(v.profile, v.profile.idNumber); n++; }
-  if (n) { db.save(); console.log(`[drop] Encrypted ${n} stored identity number(s).`); }
+  for (const v of db.all('verifications')) if (v.profile?.idNumber) { v.profile = sealIdNumber(v.profile, v.profile.idNumber); db.touch('verifications', v); n++; }
+  if (n) { console.log(`[drop] Encrypted ${n} stored identity number(s).`); }
   return n;
 }
 
@@ -142,7 +142,7 @@ export function requirementsFor(role) {
 export function getVerification(userId, create = true) {
   let v = db.find('verifications', (x) => x.userId === userId);
   if (!v && create) {
-    const user = db.find('users', (u) => u.id === userId);
+    const user = db.byId('users', userId);
     v = db.insert('verifications', { id: id(), userId, role: user?.role, profile: {}, documents: [], status: 'not_started', consentAt: null, submittedAt: null, decidedAt: null, history: [], createdAt: now() });
   }
   return v;
@@ -184,7 +184,7 @@ export function recompute(v) {
 
 /** Mirror the verification status onto the user, and switch drivers on or off. */
 export function syncUser(v) {
-  const user = db.find('users', (u) => u.id === v.userId);
+  const user = db.byId('users', v.userId);
   if (!user) return;
   const patch = { verificationStatus: v.status };
   if (user.role === 'driver') {

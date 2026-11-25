@@ -180,7 +180,7 @@ router.post('/mfa/confirm', wrap(async (req, res, next) => {
   res.json({ recoveryCodes: codes, ...issueSession(req, res, fresh), user: publicUser(fresh) });
 }), requireAuth, wrap(async (req, res) => {
   const codes = await finishSetup(req.user, req.body?.code);
-  res.json({ recoveryCodes: codes, user: publicUser(db.find('users', (u) => u.id === req.user.id)) });
+  res.json({ recoveryCodes: codes, user: publicUser(db.byId('users', req.user.id)) });
 }));
 
 router.post('/mfa/verify', wrap(async (req, res) => {
@@ -200,7 +200,7 @@ router.post('/mfa/disable', requireAuth, wrap(async (req, res) => {
   await checkCode(req.user, req.body || {});
   db.update('users', req.user.id, { mfa: null });
   audit(req.user, 'mfa_disabled', req.user.id, {});
-  res.json({ user: publicUser(db.find('users', (u) => u.id === req.user.id)) });
+  res.json({ user: publicUser(db.byId('users', req.user.id)) });
 }));
 
 /** Sign out on every device (ends all sessions, including this one). */

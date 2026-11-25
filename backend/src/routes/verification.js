@@ -185,8 +185,7 @@ router.get('/notifications', requireAuth, (req, res) => {
 });
 
 router.post('/notifications/read', requireAuth, (req, res) => {
-  for (const n of db.filter('notifications', (x) => x.userId === req.user.id && !x.read)) n.read = true;
-  db.save();
+  for (const n of db.filter('notifications', (x) => x.userId === req.user.id && !x.read)) db.update('notifications', n.id, { read: true });
   res.json({ ok: true });
 });
 

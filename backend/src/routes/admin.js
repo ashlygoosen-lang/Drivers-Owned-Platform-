@@ -36,7 +36,7 @@ router.get('/admin/users', (req, res) => {
 });
 
 router.patch('/admin/users/:id', wrap(async (req, res) => {
-  const user = db.find('users', (u) => u.id === req.params.id);
+  const user = db.byId('users', req.params.id);
   if (!user) throw new HttpError(404, 'User not found.');
   if (user.id === req.user.id && req.body.disabled) throw bad('You cannot suspend your own account.');
   const patch = {};
@@ -56,14 +56,14 @@ router.patch('/admin/users/:id', wrap(async (req, res) => {
 
 router.get('/admin/applications', (req, res) => {
   const apps = page(db.all('applications'), req).map((a) => {
-    const u = db.find('users', (x) => x.id === a.userId);
+    const u = db.byId('users', a.userId);
     return { ...a, applicant: u ? { name: u.name, email: u.email, phone: u.phone } : null, verificationStatus: u?.verificationStatus || 'not_started' };
   });
   res.json({ applications: apps });
 });
 
 router.patch('/admin/applications/:id', wrap(async (req, res) => {
-  const app = db.find('applications', (a) => a.id === req.params.id);
+  const app = db.byId('applications', req.params.id);
   if (!app) throw new HttpError(404, 'Application not found.');
   const status = oneOf(req.body.status, ['under_review', 'approved', 'rejected'], 'Status');
   if (status === 'approved') {
@@ -103,14 +103,14 @@ router.get('/admin/bookings', (req, res) => {
 
 router.get('/admin/tickets', (req, res) => {
   const tickets = page(db.all('tickets'), req).map((t) => {
-    const u = db.find('users', (x) => x.id === t.userId);
+    const u = db.byId('users', t.userId);
     return { ...t, user: u ? { name: u.name, email: u.email } : null };
   });
   res.json({ tickets });
 });
 
 router.patch('/admin/tickets/:id', wrap(async (req, res) => {
-  const t = db.find('tickets', (x) => x.id === req.params.id);
+  const t = db.byId('tickets', req.params.id);
   if (!t) throw new HttpError(404, 'Ticket not found.');
   const patch = {};
   if (req.body.status) patch.status = oneOf(req.body.status, ['open', 'in_progress', 'resolved'], 'Status');
@@ -121,7 +121,7 @@ router.patch('/admin/tickets/:id', wrap(async (req, res) => {
 router.get('/admin/enquiries', (req, res) => res.json({ enquiries: page(db.all('enquiries'), req) }));
 
 router.patch('/admin/enquiries/:id', wrap(async (req, res) => {
-  const e = db.find('enquiries', (x) => x.id === req.params.id);
+  const e = db.byId('enquiries', req.params.id);
   if (!e) throw new HttpError(404, 'Enquiry not found.');
   res.json({ enquiry: db.update('enquiries', e.id, { status: oneOf(req.body.status, ['new', 'contacted', 'closed'], 'Status') }) });
 }));

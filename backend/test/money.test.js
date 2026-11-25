@@ -43,8 +43,8 @@ const { buildCall, buildKlv, xmlDate, parseResponse } = await import('../src/mon
 
 let server, base;
 const call = makeClient(() => base);
-before(async () => { await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(async () => { server.close(); paystack.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => { await (await import('../src/db.js')).initDb(); await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
+after(async () => { server.close(); paystack.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 /** Build a Remote API call exactly as Paymentology would, signed with the terminal password. */
 function remote(method, args, { password = 'terminal-secret' } = {}) {

@@ -14,8 +14,8 @@ const { db } = await import('../src/db.js');
 const { trialBalance } = await import('../src/money/ledger.js');
 let server, base;
 const call = makeClient(() => base);
-before(async () => { await seedDemo(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(async () => { server.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => { await (await import('../src/db.js')).initDb(); await seedDemo(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
+after(async () => { server.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 test('demo logins open every dashboard with sample data', async () => {
   const list = await call('GET', '/auth/demo');

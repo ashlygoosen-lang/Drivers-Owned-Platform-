@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
-import { db, id, now } from '../db.js';
+import { db, id, now, settings } from '../db.js';
 import { requireAuth, checkPassword, hashPassword, endAllSessions, STAFF_ROLES } from '../auth.js';
 import { str, email, password, oneOf, wrap, bad, HttpError } from '../validate.js';
 import { assertNotBreached } from './auth.js';
@@ -34,7 +34,7 @@ router.post('/auth/password/forgot', wrap(async (req, res) => {
   const user = db.find('users', (u) => u.email === addr && !u.disabled && !u.deletedAt);
   if (!user || isDemoUser(user)) return res.json(generic);
   const token = crypto.randomBytes(32).toString('base64url');
-  for (const r of db.filter('passwordResets', (x) => x.userId === user.id && !x.usedAt)) r.usedAt = now(); // only the newest link works
+  for (const r of db.filter('passwordResets', (x) => x.userId === user.id && !x.usedAt)) db.update('passwordResets', r.id, { usedAt: now() }); // only the newest link works
   db.insert('passwordResets', { id: id(), userId: user.id, hash: sha(token), expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(), usedAt: null, ip: req.ip, createdAt: now() });
   const url = `${PUBLIC_URL(req)}/reset-password?token=${token}`;
   const r = await sendMail({
@@ -55,7 +55,7 @@ router.post('/auth/password/reset', wrap(async (req, res) => {
   if (!user) throw bad('This reset link has expired or was already used. Please request a new one.');
   const pw = password(req.body?.newPassword);
   await assertNotBreached(pw);
-  r.usedAt = now();
+  db.update('passwordResets', r.id, { usedAt: now() });
   db.update('users', user.id, { passwordHash: await hashPassword(pw), tokenVersion: (user.tokenVersion || 0) + 1 }); // signs out every device
   for (const s of db.filter('sessions', (x) => x.userId === user.id && !x.revokedAt)) revokeFamily(s.family, 'password_reset');
   audit(user, 'password_reset', user.id, {});
@@ -93,11 +93,10 @@ router.post('/auth/delete-account', requireAuth, wrap(async (req, res) => {
   });
   const v = db.find('verifications', (x) => x.userId === u.id);
   if (v) db.update('verifications', v.id, { closedAt: now(), retainUntil, profile: { ...v.profile, addressLine1: '', addressLine2: '', suburb: '', emergencyName: '', emergencyPhone: '' } });
-  for (const m of db.filter('messages', (x) => x.senderId === u.id)) m.senderName = 'Deleted user';
-  for (const n of db.filter('notifications', (x) => x.userId === u.id)) n.body = '';
+  for (const m of db.filter('messages', (x) => x.senderId === u.id)) db.update('messages', m.id, { senderName: 'Deleted user' });
+  for (const n of db.filter('notifications', (x) => x.userId === u.id)) db.update('notifications', n.id, { body: '' });
   for (const s of db.filter('sessions', (x) => x.userId === u.id && !x.revokedAt)) revokeFamily(s.family, 'account_deleted');
   removeUserDevices(u.id);
-  db.save();
   audit(u, 'account_deleted', u.id, { retainUntil });
   res.json({ ok: true, message: 'Your DROP account has been deleted.' });
 }));
@@ -134,7 +133,7 @@ router.get('/app/config', (req, res) => {
   const latest = process.env[`MOBILE_LATEST_VERSION_${app.toUpperCase()}`] || process.env.MOBILE_LATEST_VERSION || min;
   const ids = { passenger: { ios: process.env.IOS_APP_ID_PASSENGER, android: 'za.co.drop.passenger' }, driver: { ios: process.env.IOS_APP_ID_DRIVER, android: 'za.co.drop.driver' } };
   const storeUrl = platform === 'android' ? `https://play.google.com/store/apps/details?id=${ids[app].android}` : ids[app].ios ? `https://apps.apple.com/app/id${ids[app].ios}` : 'https://apps.apple.com';
-  res.json({ forceUpdate: cmp(version, min) < 0, updateAvailable: cmp(version, latest) < 0, minVersion: min, latestVersion: latest, storeUrl, maintenance: Boolean(db.get().settings?.maintenance?.on || process.env.MAINTENANCE_MODE === 'on'), supportEmail: process.env.CONTACT_EMAIL || 'hello@drop.co.za' });
+  res.json({ forceUpdate: cmp(version, min) < 0, updateAvailable: cmp(version, latest) < 0, minVersion: min, latestVersion: latest, storeUrl, maintenance: Boolean(settings().maintenance?.on || process.env.MAINTENANCE_MODE === 'on'), supportEmail: process.env.CONTACT_EMAIL || 'hello@drop.co.za' });
 });
 
 export default router;

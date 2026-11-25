@@ -2,7 +2,7 @@
   "name": "drop-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "DROP \u2014 Drivers Owned Platform API. A division of VINK Group (Pty) Ltd, registration number 2018/079316/07.",
+  "description": "DROP — Drivers Owned Platform API. A division of VINK Group (Pty) Ltd, registration number 2018/079316/07.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
@@ -24,6 +24,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.5.0",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "rate-limit-redis": "^4.3.1",
     "redis": "^4.7.1"

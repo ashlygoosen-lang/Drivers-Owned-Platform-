@@ -16,14 +16,10 @@ export function registerDevice(userId, { token, platform, app }) {
   return db.insert('devices', { id: id(), userId, token, platform, app, createdAt: now(), lastSeenAt: now() });
 }
 export function removeDevice(token, userId) {
-  const list = db.all('devices');
-  const i = list.findIndex((d) => d.token === token && (!userId || d.userId === userId));
-  if (i >= 0) { list.splice(i, 1); db.save(); }
+  db.remove('devices', (d) => d.token === token && (!userId || d.userId === userId));
 }
 export function removeUserDevices(userId) {
-  const list = db.all('devices');
-  const keep = list.filter((d) => d.userId !== userId);
-  if (keep.length !== list.length) { list.splice(0, list.length, ...keep); db.save(); }
+  db.remove('devices', (d) => d.userId === userId);
 }
 export const hasDevices = (userId) => db.all('devices').some((d) => d.userId === userId && !d.disabled);
 

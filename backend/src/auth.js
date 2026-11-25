@@ -25,12 +25,12 @@ export function readStepToken(token, step) {
   try {
     const p = jwt.verify(String(token || ''), JWT_SECRET);
     if (p.typ !== step) return null;
-    const user = db.find('users', (u) => u.id === p.sub);
+    const user = db.byId('users', p.sub);
     return user && !user.disabled && (user.tokenVersion || 0) === (p.tv || 0) ? user : null;
   } catch { return null; }
 }
 export function endAllSessions(userId) {
-  const u = db.find('users', (x) => x.id === userId);
+  const u = db.byId('users', userId);
   if (u) db.update('users', userId, { tokenVersion: (u.tokenVersion || 0) + 1 });
 }
 
@@ -51,7 +51,7 @@ function readUser(req) {
     const payload = jwt.verify(token, JWT_SECRET);
     if (payload.typ && payload.typ !== 'session') return null; // MFA step tokens are not sessions
     if ((payload.ep || '1') !== sessionEpoch()) return null; // platform-wide sign-out
-    const user = db.find('users', (u) => u.id === payload.sub);
+    const user = db.byId('users', payload.sub);
     if (user && (user.tokenVersion || 0) !== (payload.tv || 0)) return null; // revoked
     if (user && payload.role && payload.role !== user.role) return null; // role changed since sign-in
     if (user && !demoSessionAllowed(user)) return null; // demo switched off (or staff demo locked): demo sessions end

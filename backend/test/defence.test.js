@@ -26,8 +26,8 @@ const { db } = await import('../src/db.js');
 const { verifyAuditChain, revealIdNumber } = await import('../src/kyc.js');
 let server, base;
 const call = makeClient(() => base);
-before(async () => { await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(async () => { server.closeAllConnections(); server.close(); turnstile.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => { await (await import('../src/db.js')).initDb(); await seedAdmin(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
+after(async () => { server.closeAllConnections(); server.close(); turnstile.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 const cookieOf = (res) => (res.headers.getSetCookie?.() || []).find((c) => c.startsWith('drop_rt='))?.split(';')[0] || '';
 async function raw(method, url, { body, cookie, headers = {} } = {}) {
@@ -133,7 +133,7 @@ test('Bot check, booking rate limit with Retry-After, and maintenance mode', asy
   assert.ok(db.find('audit', (a) => a.action === 'maintenance_on'));
 });
 
-test('Backups: encrypted, tamper-evident, uploaded off-site, and restorable into a fresh folder', async () => {
+test('Backups: encrypted, tamper-evident, uploaded off-site, and restorable into a fresh folder', { skip: Boolean(process.env.DATABASE_URL) && 'PostgreSQL mode uses managed database backups (point-in-time recovery)' }, async () => {
   const { runBackup, restoreBackup, decryptBackup } = await import('../src/backup.js');
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'drop-bk-'));
   const target = path.join(os.tmpdir(), `drop-restore-${Date.now()}`);

@@ -70,3 +70,45 @@ export async function ttl(key) {
   const e = alive(key);
   return e?.exp ? Math.ceil((e.exp - Date.now()) / 1000) : -1;
 }
+
+/* ---- pub/sub (cross-instance fan-out) ---- */
+let sub = null;
+const subs = new Map(); // channel -> Set(fn)
+export async function subscribe(channel, fn) {
+  if (!subs.has(channel)) subs.set(channel, new Set());
+  subs.get(channel).add(fn);
+  const r = redis();
+  if (!r) return;
+  if (!sub) { sub = r.duplicate(); sub.on('error', () => undefined); await sub.connect(); }
+  if (subs.get(channel).size === 1) await sub.subscribe(channel, (msg) => { for (const f of subs.get(channel) || []) f(msg); });
+}
+/** Publish to every instance (including this one when there is no Redis). */
+export async function publish(channel, msg) {
+  const r = redis();
+  if (r) return r.publish(channel, msg);
+  for (const f of subs.get(channel) || []) f(msg);
+}
+
+/* ---- hashes (live driver locations) ---- */
+const memHash = new Map();
+export async function hset(key, field, value) {
+  const r = redis();
+  if (r) return r.hSet(key, field, value);
+  if (!memHash.has(key)) memHash.set(key, new Map());
+  memHash.get(key).set(field, value);
+}
+export async function hget(key, field) {
+  const r = redis();
+  if (r) return r.hGet(key, field);
+  return memHash.get(key)?.get(field) ?? null;
+}
+export async function hgetall(key) {
+  const r = redis();
+  if (r) return r.hGetAll(key);
+  return Object.fromEntries(memHash.get(key) || []);
+}
+export async function hdel(key, field) {
+  const r = redis();
+  if (r) return r.hDel(key, field);
+  memHash.get(key)?.delete(field);
+}

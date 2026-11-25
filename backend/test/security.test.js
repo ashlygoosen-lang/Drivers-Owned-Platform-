@@ -28,8 +28,8 @@ const { db } = await import('../src/db.js');
 const { totp } = await import('../src/security.js');
 let server, base;
 const call = makeClient(() => base);
-before(async () => { await seedAdmin(); await seedDemo(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(async () => { server.closeAllConnections(); server.close(); pwned.close(); await db.flush(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => { await (await import('../src/db.js')).initDb(); await seedAdmin(); await seedDemo(); server = createApp().listen(0); base = `http://127.0.0.1:${server.address().port}/api`; });
+after(async () => { server.closeAllConnections(); server.close(); pwned.close(); await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
 const login = (email, password) => call('POST', '/auth/login', { body: { email, password } });
 

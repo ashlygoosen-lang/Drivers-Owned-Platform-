@@ -25,6 +25,8 @@ export const cents = (rands) => Math.round(Number(rands) * 100);
 export const rands = (c) => Math.round(c) / 100;
 
 let balances = null;
+// Entries written by other servers arrive through the store's catch-up: rebuild the totals.
+db.onChange('ledger', (_entry, _kind, remote) => { if (remote) balances = null; });
 function cache() {
   if (!balances) {
     balances = new Map();

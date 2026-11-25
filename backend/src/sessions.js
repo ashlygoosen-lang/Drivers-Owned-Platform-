@@ -46,8 +46,7 @@ function readRefresh(req) {
 }
 
 export function revokeFamily(family, reason) {
-  for (const s of db.filter('sessions', (x) => x.family === family && !x.revokedAt)) { s.revokedAt = now(); s.revokeReason = reason; }
-  db.save();
+  for (const s of db.filter('sessions', (x) => x.family === family && !x.revokedAt)) db.update('sessions', s.id, { revokedAt: now(), revokeReason: reason });
 }
 
 /** Rotate a refresh token. Returns { user, json } or throws a 401-style error object. */
@@ -62,12 +61,10 @@ export function refresh(req, res) {
     if (s.replacedBy) revokeFamily(s.family, 'reuse_detected');
     return fail(s.replacedBy ? 'reuse' : 'revoked');
   }
-  const user = db.find('users', (u) => u.id === s.userId);
-  if (!user || user.disabled || Date.parse(s.expiresAt) < Date.now() || (user.tokenVersion || 0) !== s.tv || (s.ep || '1') !== sessionEpoch()) { s.revokedAt = now(); db.save(); return fail('expired'); }
+  const user = db.byId('users', s.userId);
+  if (!user || user.disabled || Date.parse(s.expiresAt) < Date.now() || (user.tokenVersion || 0) !== s.tv || (s.ep || '1') !== sessionEpoch()) { db.update('sessions', s.id, { revokedAt: now() }); return fail('expired'); }
   const next = create(user, req, s.family);
-  s.replacedBy = next.s.id;
-  s.rotatedAt = now();
-  db.save();
+  db.update('sessions', s.id, { replacedBy: next.s.id, rotatedAt: now() });
   res.append('Set-Cookie', cookieHeader(next.token, Date.parse(next.s.expiresAt) - Date.now()));
   return { user, json: { token: signToken(user), ...(isMobile(req) && { refreshToken: next.token }) } };
 }
@@ -82,7 +79,5 @@ export function endSession(req, res) {
 /** Housekeeping: drop sessions that expired more than a week ago. */
 export function pruneSessions() {
   const cutoff = Date.now() - 7 * DAY;
-  const all = db.all('sessions');
-  const keep = all.filter((s) => Date.parse(s.expiresAt) > cutoff);
-  if (keep.length !== all.length) { all.splice(0, all.length, ...keep); db.save(); }
+  db.remove('sessions', (s) => Date.parse(s.expiresAt) <= cutoff);
 }
