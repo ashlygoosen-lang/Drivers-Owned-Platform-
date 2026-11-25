@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.STAGING_URL != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ZAP baseline scan
         uses: zaproxy/action-baseline@v0.14.0
         with:
