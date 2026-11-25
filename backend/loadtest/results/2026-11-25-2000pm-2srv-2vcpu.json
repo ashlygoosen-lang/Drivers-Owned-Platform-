@@ -1,0 +1,98 @@
+{
+  "config": {
+    "instances": 2,
+    "rateTarget": "33/s (1980/min)",
+    "duration": "60s",
+    "drivers": 600,
+    "cpuCores": 2
+  },
+  "bookings": {
+    "offered": 1047,
+    "created": 1047,
+    "completed": 804,
+    "perMinute": 1047
+  },
+  "requests": {
+    "total": 103065,
+    "perSecond": 1374
+  },
+  "latencyMs": [
+    {
+      "endpoint": "POST /fares/estimate",
+      "count": 1047,
+      "p50": 235,
+      "p95": 433,
+      "p99": 516,
+      "statuses": {
+        "200": 1047
+      }
+    },
+    {
+      "endpoint": "GET /drivers/requests",
+      "count": 41611,
+      "p50": 519,
+      "p95": 888,
+      "p99": 1195,
+      "statuses": {
+        "200": 41611
+      }
+    },
+    {
+      "endpoint": "POST /drivers/location",
+      "count": 10027,
+      "p50": 477,
+      "p95": 797,
+      "p99": 1667,
+      "statuses": {
+        "200": 10027
+      }
+    },
+    {
+      "endpoint": "POST /bookings",
+      "count": 1047,
+      "p50": 536,
+      "p95": 965,
+      "p99": 1139,
+      "statuses": {
+        "201": 1047
+      }
+    },
+    {
+      "endpoint": "POST /drivers/bookings/:id/accept",
+      "count": 39157,
+      "p50": 464,
+      "p95": 934,
+      "p99": 1152,
+      "statuses": {
+        "200": 804,
+        "409": 38353
+      }
+    },
+    {
+      "endpoint": "GET /bookings/:id",
+      "count": 7764,
+      "p50": 318,
+      "p95": 641,
+      "p99": 788,
+      "statuses": {
+        "200": 7764
+      }
+    },
+    {
+      "endpoint": "POST /drivers/bookings/:id/advance",
+      "count": 2412,
+      "p50": 636,
+      "p95": 1011,
+      "p99": 1159,
+      "statuses": {
+        "200": 2412
+      }
+    }
+  ],
+  "correctness": {
+    "duplicateRefs": 0,
+    "driversWithTwoActiveTrips": 0,
+    "completedButUnsettled": 0,
+    "ledgerBalanced": true
+  }
+}

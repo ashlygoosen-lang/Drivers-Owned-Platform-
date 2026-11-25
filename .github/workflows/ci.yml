@@ -38,6 +38,45 @@ jobs:
       - name: Frontend type-check and build
         run: npm run build --prefix frontend
 
+  scale:
+    name: PostgreSQL + Redis, multi-server races
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: drop, POSTGRES_PASSWORD: ci-only-password, POSTGRES_DB: postgres }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U drop" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: drop
+      PGPASSWORD: ci-only-password
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client redis-tools
+      - run: npm ci --prefix backend
+      - name: Whole API suite on PostgreSQL + Redis
+        working-directory: backend
+        run: scripts/test-postgres.sh || (tail -50 /tmp/pgtest-*.log; exit 1)
+      - name: Races across 2 servers (last seat, idempotency, one trip per passenger/driver)
+        working-directory: backend
+        run: |
+          psql -d postgres -qc "create database drop_scale"
+          redis-cli -u "$REDIS_URL" flushall
+          SCALE_DATABASE_URL="postgresql://drop:ci-only-password@localhost:5432/drop_scale" SCALE_REDIS_URL="$REDIS_URL" node --test --test-timeout=300000 test/scale/concurrency.test.js
+
   mobile:
     name: Mobile apps (type-check, unit tests, bundle)
     runs-on: ubuntu-latest
