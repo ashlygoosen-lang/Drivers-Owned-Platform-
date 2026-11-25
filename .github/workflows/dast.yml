@@ -1,0 +1,28 @@
+# Dynamic scan (OWASP ZAP baseline) against STAGING. Runs on demand and every Monday.
+# Set the repository variable STAGING_URL (Settings → Secrets and variables → Actions → Variables).
+# Never point this at production.
+name: DAST (staging)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  zap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.STAGING_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ vars.STAGING_URL }}
+          rules_file_name: .zap/rules.tsv
+          fail_action: true
+          allow_issue_writing: true

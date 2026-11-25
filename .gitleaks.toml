@@ -1,0 +1,8 @@
+title = "DROP gitleaks config"
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholders and test-only fixtures"
+paths = ['''backend/\.env\.example''', '''backend/test/.*''']
+regexes = ['''change-me-to-a-[a-z-]+''', '''choose-a-strong-password''']

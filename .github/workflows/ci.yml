@@ -1,0 +1,97 @@
+# DROP CI: tests, build and security gates on every push and pull request.
+# A pull request cannot be merged while any job fails (turn on branch protection for main and
+# mark these checks as required: Settings → Branches → main → Require status checks).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install (lockfiles only, no install scripts from the network)
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix frontend
+      - name: Backend tests (API, security, money, comms, tracking)
+        run: npm test --prefix backend
+      - name: Frontend type-check and build
+        run: npm run build --prefix frontend
+
+  dependencies:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit (fail on high or critical)
+        run: |
+          npm audit --prefix backend --omit=dev --audit-level=high
+          npm audit --prefix frontend --audit-level=high
+      - name: OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        with:
+          scan-args: |-
+            --lockfile=backend/package-lock.json
+            --lockfile=frontend/package-lock.json
+
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # scan the full history, not just the latest commit
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: Static analysis (Semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (OWASP Top 10, Node, Express, React, secrets)
+        run: semgrep scan --error --severity ERROR --config p/owasp-top-ten --config p/nodejs --config p/expressjs --config p/react --config p/secrets --config .semgrep.yml --exclude 'backend/test' --exclude 'brand'
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3

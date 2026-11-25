@@ -1,0 +1,23 @@
+# DROP-specific rules on top of the Semgrep registry packs.
+rules:
+  - id: drop-no-plain-id-number
+    message: Store identity numbers with sealIdNumber() (SEC-008), never as plain profile.idNumber.
+    languages: [javascript]
+    severity: ERROR
+    patterns:
+      - pattern: "$DB.update('verifications', $ID, { profile: { ..., idNumber: $X, ... } })"
+  - id: drop-no-secret-in-public-user
+    message: Do not return raw user records; pass them through publicUser() (SEC-007).
+    languages: [javascript]
+    severity: ERROR
+    patterns:
+      - pattern: "res.json({ ..., user: db.find('users', ...), ... })"
+  - id: drop-no-token-in-localstorage
+    message: Session tokens stay in memory (SEC-017). Do not write them to localStorage or sessionStorage.
+    languages: [typescript, javascript]
+    severity: ERROR
+    pattern-either:
+      - pattern: localStorage.setItem($K, $T)
+      - pattern: sessionStorage.setItem("drop.token", $T)
+    paths:
+      include: ['/frontend/src/lib/api.ts', '/frontend/src/lib/auth.tsx']
