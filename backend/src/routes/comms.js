@@ -30,7 +30,7 @@ export function commsOpen(b) {
 
 /** The booking plus who is on each side, for one of its two participants. */
 async function party(req, { staff = false } = {}) {
-  const b = await db.findFresh('bookings', (x) => x.id === req.params.id || x.ref === req.params.id);
+  const b = await db.byIdFresh('bookings', req.params.id);
   const u = req.user;
   if (!b) throw new HttpError(404, 'Trip not found.');
   const side = b.userId === u.id ? 'passenger' : b.driverId === u.id ? 'driver' : null;

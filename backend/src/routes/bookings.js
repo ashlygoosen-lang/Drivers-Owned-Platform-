@@ -129,7 +129,7 @@ router.get('/bookings', requireAuth, (req, res) => {
 });
 
 async function load(req) {
-  const booking = await db.findFresh('bookings', (b) => b.id === req.params.id || b.ref === req.params.id);
+  const booking = await db.byIdFresh('bookings', req.params.id);
   if (!booking) throw new HttpError(404, 'Booking not found.');
   const u = req.user;
   const allowed = u.role === 'admin' || booking.userId === u.id || booking.driverId === u.id

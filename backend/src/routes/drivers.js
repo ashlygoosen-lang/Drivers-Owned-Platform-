@@ -103,7 +103,7 @@ const NEXT = { accepted: 'arriving', arriving: 'in_progress', in_progress: 'comp
 
 router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (req, res) => {
   approved(req);
-  const booking = await db.findFresh('bookings', (b) => b.id === req.params.id);
+  const booking = await db.byIdFresh('bookings', req.params.id);
   if (!booking || booking.status !== 'requested' || !sameWorld(req.user, db.byId('users', booking.userId))) throw new HttpError(409, 'This request is no longer available.');
   if (db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status))) {
     throw bad('Finish your current trip before accepting another.');
@@ -116,7 +116,7 @@ router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (r
 }));
 
 router.post('/drivers/bookings/:id/advance', requireRole('driver'), wrap(async (req, res) => {
-  const booking = await db.findFresh('bookings', (b) => b.id === req.params.id && b.driverId === req.user.id);
+  const booking = await db.byIdFresh('bookings', req.params.id).then((b) => (b?.driverId === req.user.id ? b : undefined));
   if (!booking || !NEXT[booking.status]) throw bad('This trip cannot be updated.');
   const next = NEXT[booking.status];
   const updated = await transition(booking, next, next === 'completed' ? { completedAt: now() } : {}, { from: booking.status, when: { driverId: req.user.id } });

@@ -287,6 +287,13 @@ export const db = {
   find: (collection, predicate) => { ensure(collection); return data[collection].find(predicate); },
   filter: (collection, predicate) => { ensure(collection); return data[collection].filter(predicate); },
   byId: (collection, rid) => index.get(collection)?.get(rid),
+  /** byId that catches up with other servers on a miss (read-after-write across instances). */
+  async byIdFresh(collection, recordId) {
+    const hit = this.byId(collection, recordId);
+    if (hit || !pg || typeof recordId !== 'string') return hit;
+    await catchUp();
+    return this.byId(collection, recordId);
+  },
   /** Like find, but if nothing matches, first pull other servers' latest writes (read-after-write across instances). */
   async findFresh(collection, predicate) {
     ensure(collection);
