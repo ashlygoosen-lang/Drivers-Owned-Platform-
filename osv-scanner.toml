@@ -1,0 +1,12 @@
+# Accepted findings, each with a reason and an expiry date so they are re-checked.
+# Only build-time tooling may be listed here; anything shipped to users must be fixed.
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-31
+reason = "minimatch ReDoS in Expo build tooling (@expo/fingerprint, CLI). Not bundled into the apps; fixed by the next Expo SDK patch."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-01-31
+reason = "glob CLI issue in a dev-only dependency of Expo tooling. Not bundled into the apps or the server."
