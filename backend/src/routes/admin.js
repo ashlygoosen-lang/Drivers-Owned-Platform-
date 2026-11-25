@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, now } from '../db.js';
 import { UPLOAD_DIR } from '../config.js';
-import { requireRole, publicUser, hashPassword, STAFF_ROLES } from '../auth.js';
-import { assertNotBreached } from './auth.js';
-import { getVerification, recompute } from '../kyc.js';
+import { requireRole, publicUser, STAFF_ROLES } from '../auth.js';
+import { sendStaffInvite } from './account.js';
+import { getVerification, recompute, audit } from '../kyc.js';
 import { id as newId } from '../db.js';
-import { email, password } from '../validate.js';
+import { email } from '../validate.js';
 import { view } from './bookings.js';
 import { str, oneOf, wrap, bad, HttpError } from '../validate.js';
 
@@ -137,11 +137,25 @@ router.post('/admin/staff', wrap(async (req, res) => {
   const b = req.body || {};
   const addr = email(b.email);
   if (db.find('users', (u) => u.email === addr)) throw new HttpError(409, 'An account with this email already exists.');
+  // SEC-020: no admin-chosen password. The new staff member gets a single-use invitation link and
+  // chooses their own password; until then the account has no usable password.
   const user = db.insert('users', {
     id: newId(), name: str(b.name, 'Full name', { min: 2, max: 80 }), email: addr, phone: '',
-    role: oneOf(b.role, STAFF_ROLES, 'Role'), passwordHash: await hashPassword(await (async (pw) => { await assertNotBreached(pw); return pw; })(password(b.password))), createdAt: now(), createdBy: req.user.email,
+    role: oneOf(b.role, STAFF_ROLES, 'Role'), passwordHash: '!', invitePending: true, createdAt: now(), createdBy: req.user.email,
   });
-  res.status(201).json({ user: publicUser(user) });
+  const invite = await sendStaffInvite(req, user, req.user.name);
+  audit(req.user, 'staff_invited', user.id, { role: user.role, emailed: String(invite.sent) });
+  res.status(201).json({ user: publicUser(user), invite });
+}));
+
+/** Send a fresh invitation (the old link stops working) to a staff member who hasn't set a password yet. */
+router.post('/admin/staff/:id/invite', wrap(async (req, res) => {
+  const user = db.find('users', (u) => u.id === req.params.id && STAFF_ROLES.includes(u.role));
+  if (!user) throw new HttpError(404, 'Staff member not found.');
+  if (!user.invitePending) throw bad('This person has already set their password. Ask them to use “Forgot password” if they need a new one.');
+  const invite = await sendStaffInvite(req, user, req.user.name);
+  audit(req.user, 'staff_invite_resent', user.id, { emailed: String(invite.sent) });
+  res.json({ invite });
 }));
 
 router.patch('/admin/staff/:id', wrap(async (req, res) => {

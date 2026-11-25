@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { createStaff } from './helpers.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -92,7 +93,7 @@ test('passenger: must verify before booking; documents are encrypted and reviewe
 
   // Compliance officer created by admin reviews
   const admin = (await call('POST', '/auth/login', { body: { email: 'admin@drop.test', password: 'AdminPass123' } })).data.token;
-  assert.equal((await call('POST', '/admin/staff', { token: admin, body: { name: 'Nomsa C', email: 'nomsa@drop.test', role: 'compliance', password: 'Compliance1' } })).status, 201);
+  assert.equal((await createStaff(call, admin, { name: 'Nomsa C', email: 'nomsa@drop.test', role: 'compliance', password: 'Compliance1' })).status, 201);
   const c = (await call('POST', '/auth/login', { body: { email: 'nomsa@drop.test', password: 'Compliance1' } })).data.token;
   assert.equal((await call('GET', '/admin/staff', { token: c })).status, 403, 'compliance cannot manage staff');
 
@@ -174,7 +175,7 @@ test('driver: apply, verify documents with expiry, go online, complete a trip', 
 
 test('stakeholder dashboards and access control', async () => {
   const admin = (await call('POST', '/auth/login', { body: { email: 'admin@drop.test', password: 'AdminPass123' } })).data.token;
-  await call('POST', '/admin/staff', { token: admin, body: { name: 'Sipho S', email: 'sipho@drop.test', role: 'support', password: 'Support123' } });
+  await createStaff(call, admin, { name: 'Sipho S', email: 'sipho@drop.test', role: 'support', password: 'Support123' });
   const s = (await call('POST', '/auth/login', { body: { email: 'sipho@drop.test', password: 'Support123' } })).data.token;
   assert.equal((await call('GET', '/admin/tickets', { token: s })).status, 200);
   assert.equal((await call('GET', '/admin/users', { token: s })).status, 200);
@@ -184,4 +185,21 @@ test('stakeholder dashboards and access control', async () => {
   const p = (await call('POST', '/auth/login', { body: { email: 'lerato@example.com', password: 'Passw0rd!' } })).data.token;
   assert.equal((await call('GET', '/compliance/queue', { token: p })).status, 403);
   assert.equal((await call('POST', '/enquiries', { body: { topic: 'Business solutions', name: 'Acme', email: 'ops@acme.co.za', message: 'We need staff transport.' } })).status, 201);
+});
+
+test('staff are invited and choose their own password (SEC-020)', async () => {
+  const admin = (await call('POST', '/auth/login', { body: { email: 'admin@drop.test', password: 'AdminPass123' } })).data.token;
+  const r = await call('POST', '/admin/staff', { token: admin, body: { name: 'Invited Person', email: 'invited@drop.test', role: 'support', password: 'IgnoredPass1' } });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.user.invitePending, true);
+  assert.equal((await call('POST', '/auth/login', { body: { email: 'invited@drop.test', password: 'IgnoredPass1' } })).status, 401, 'an admin-supplied password is ignored');
+  const first = new URL(r.data.invite.url).searchParams.get('token');
+  const again = await call('POST', `/admin/staff/${r.data.user.id}/invite`, { token: admin });
+  assert.equal(again.status, 200);
+  assert.equal((await call('POST', '/auth/password/reset', { body: { token: first, newPassword: 'MyOwnPass77' } })).status, 400, 'a re-sent invitation cancels the old link');
+  const second = new URL(again.data.invite.url).searchParams.get('token');
+  const set = await call('POST', '/auth/password/reset', { body: { token: second, newPassword: 'MyOwnPass77' } });
+  assert.equal(set.status, 200, JSON.stringify(set.data));
+  assert.equal((await call('POST', '/auth/login', { body: { email: 'invited@drop.test', password: 'MyOwnPass77' } })).status, 200);
+  assert.equal((await call('POST', `/admin/staff/${r.data.user.id}/invite`, { token: admin })).status, 400, 'no new invitation once the password is set');
 });

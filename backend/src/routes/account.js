@@ -24,7 +24,31 @@ const router = Router();
 const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
 const PUBLIC_URL = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 
-/* ---------- Forgotten password ---------- */
+/* ---------- Forgotten password, and staff invitations ---------- */
+
+/**
+ * A single-use link to set a password: 'reset' (30 minutes) or 'invite' for a new staff account (72 hours).
+ * Only the newest link for a user works. Returns the URL; the token itself is stored only as a hash.
+ */
+export function passwordLink(req, user, kind = 'reset') {
+  const token = crypto.randomBytes(32).toString('base64url');
+  for (const r of db.filter('passwordResets', (x) => x.userId === user.id && !x.usedAt)) db.update('passwordResets', r.id, { usedAt: now() });
+  const minutes = kind === 'invite' ? 72 * 60 : 30;
+  db.insert('passwordResets', { id: id(), userId: user.id, kind, hash: sha(token), expiresAt: new Date(Date.now() + minutes * 60_000).toISOString(), usedAt: null, ip: req.ip, createdAt: now() });
+  return { token, url: `${PUBLIC_URL(req)}/reset-password?token=${token}${kind === 'invite' ? '&invite=1' : ''}` };
+}
+
+/** Email a new staff member their invitation. Returns whether it was sent. */
+export async function sendStaffInvite(req, user, invitedBy) {
+  const { url } = passwordLink(req, user, 'invite');
+  const first = user.name.split(' ')[0];
+  const r = await sendMail({
+    to: user.email, subject: 'You’ve been invited to the DROP staff console',
+    text: `Hi ${first},\n\n${invitedBy} has created a DROP staff account for you. Use this link to choose your password. It works once and expires in 72 hours:\n${url}\n\nAfter that you’ll set up two-step sign-in with an authenticator app.`,
+    html: emailLayout('Set up your DROP staff account', [`Hi ${first},`, `${invitedBy} has created a DROP staff account for you. Choose your own password with the button below. The link works once and expires in 72 hours.`, 'After that you’ll set up two-step sign-in with an authenticator app.'], { url, label: 'Choose your password' }),
+  });
+  return { sent: Boolean(r.sent), url: r.sent ? null : url };
+}
 
 router.post('/auth/password/forgot', wrap(async (req, res) => {
   const addr = email(req.body?.email);
@@ -33,10 +57,7 @@ router.post('/auth/password/forgot', wrap(async (req, res) => {
   if (await kv.incr(`pwreset:${addr}`, 3600) > 3) return res.json(generic);
   const user = db.find('users', (u) => u.email === addr && !u.disabled && !u.deletedAt);
   if (!user || isDemoUser(user)) return res.json(generic);
-  const token = crypto.randomBytes(32).toString('base64url');
-  for (const r of db.filter('passwordResets', (x) => x.userId === user.id && !x.usedAt)) db.update('passwordResets', r.id, { usedAt: now() }); // only the newest link works
-  db.insert('passwordResets', { id: id(), userId: user.id, hash: sha(token), expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(), usedAt: null, ip: req.ip, createdAt: now() });
-  const url = `${PUBLIC_URL(req)}/reset-password?token=${token}`;
+  const { token, url } = passwordLink(req, user, 'reset');
   const r = await sendMail({
     to: user.email,
     subject: 'Reset your DROP password',
@@ -56,8 +77,12 @@ router.post('/auth/password/reset', wrap(async (req, res) => {
   const pw = password(req.body?.newPassword);
   await assertNotBreached(pw);
   db.update('passwordResets', r.id, { usedAt: now() });
-  db.update('users', user.id, { passwordHash: await hashPassword(pw), tokenVersion: (user.tokenVersion || 0) + 1 }); // signs out every device
+  db.update('users', user.id, { passwordHash: await hashPassword(pw), tokenVersion: (user.tokenVersion || 0) + 1, invitePending: false }); // signs out every device
   for (const s of db.filter('sessions', (x) => x.userId === user.id && !x.revokedAt)) revokeFamily(s.family, 'password_reset');
+  if (r.kind === 'invite') {
+    audit(user, 'staff_invite_accepted', user.id, {});
+    return res.json({ ok: true, message: 'Your password is set. Sign in to finish setting up two-step sign-in.' });
+  }
   audit(user, 'password_reset', user.id, {});
   if (STAFF_ROLES.includes(user.role)) securityEvent('staff_password_reset', { user: user.id }, 'high');
   void sendMail({ to: user.email, subject: 'Your DROP password was changed', text: 'Your DROP password was just changed. If this wasn’t you, contact DROP support immediately.', html: emailLayout('Your password was changed', ['Your DROP password was just changed and you’ve been signed out on all devices.', 'If this wasn’t you, contact DROP support immediately.']) });

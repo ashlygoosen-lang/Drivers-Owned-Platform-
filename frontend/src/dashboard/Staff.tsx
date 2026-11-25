@@ -11,29 +11,42 @@ const ROLE_INFO: Record<string, string> = {
 };
 
 export function StaffManager({ notify }: { notify: Notify }) {
-  const { data, reload } = useLoad<{ staff: User[] }>('/admin/staff');
+  const { data, reload } = useLoad<{ staff: (User & { invitePending?: boolean })[] }>('/admin/staff');
   const [error, setError] = useState('');
+  const [link, setLink] = useState<{ name: string; url: string } | null>(null);
+  const shown = (name: string, invite: { sent: boolean; url: string | null }) => {
+    if (invite.sent) { setLink(null); notify(`Invitation emailed to ${name}. The link works once and expires in 72 hours.`); }
+    else if (invite.url) { setLink({ name, url: invite.url }); notify('Email isn’t set up yet, so copy the invitation link below and send it to them privately.'); }
+  };
   async function add(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
-    try { await api('/admin/staff', { body: Object.fromEntries(new FormData(form)) }); form.reset(); setError(''); notify('Staff account created. Share the temporary password securely.'); void reload(); }
+    const body = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    try { const r = await api<{ invite: { sent: boolean; url: string | null } }>('/admin/staff', { body }); form.reset(); setError(''); shown(body.name, r.invite); void reload(); }
     catch (err) { setError((err as Error).message); }
   }
+  const resend = async (u: User) => { try { const r = await api<{ invite: { sent: boolean; url: string | null } }>(`/admin/staff/${u.id}/invite`, { body: {} }); shown(u.name, r.invite); } catch (err) { notify((err as Error).message); } };
   const patch = async (u: User, body: object) => { try { await api(`/admin/staff/${u.id}`, { method: 'PATCH', body }); notify('Staff member updated.'); void reload(); } catch (err) { notify((err as Error).message); } };
   return <div className="grid gap-6">
     <form className="grid gap-4 rounded-2xl bg-grey p-5 md:grid-cols-2" onSubmit={add}>
       <Field label="Full name"><input name="name" required className={input} /></Field>
       <Field label="Work email"><input name="email" type="email" required className={input} /></Field>
       <Field label="Role"><select name="role" className={input} defaultValue="compliance"><option value="compliance">Compliance officer</option><option value="support">Support agent</option><option value="finance">Finance officer</option><option value="admin">Super Admin</option></select></Field>
-      <Field label="Temporary password" hint="8+ characters with letters and numbers. They can change it under Profile."><input name="password" type="text" required minLength={8} className={input} autoComplete="off" /></Field>
-      <div className="md:col-span-2"><ErrorText>{error}</ErrorText><button className={button}><Icon name="plus" size={16} />Add staff member</button></div>
+      <p className="self-end text-[13px] leading-5 text-[#5b6b82]">We email them a single-use link to choose their own password (valid 72 hours). They then set up two-step sign-in. You never see or choose their password.</p>
+      <div className="md:col-span-2"><ErrorText>{error}</ErrorText><button className={button}><Icon name="mail" size={16} />Send invitation</button></div>
     </form>
+    {link && <div className="grid gap-2 rounded-2xl border border-[#f3c79b] bg-[#fff8f1] p-4 text-sm" role="status">
+      <p><b>Invitation link for {link.name}</b>. Send it privately (not in a group chat). It works once and expires in 72 hours.</p>
+      <div className="flex flex-wrap gap-2"><input readOnly aria-label="Invitation link" value={link.url} className={`${input} min-w-0 flex-1 font-mono text-[12px]`} onFocus={(e) => e.currentTarget.select()} />
+        <button type="button" className="rounded-xl border border-[#cbd0d7] bg-white px-4 font-semibold" onClick={() => { void navigator.clipboard?.writeText(link.url); notify('Link copied.'); }}>Copy</button>
+        <button type="button" className="px-2 underline" onClick={() => setLink(null)}>Done</button></div>
+    </div>}
     <ul className="grid gap-2 text-[13px] text-[#5b6b82]">{Object.values(ROLE_INFO).map((r) => <li key={r}>• {r}</li>)}</ul>
     {!data ? <Loading /> : <Table head={['Name', 'Email', 'Role', 'Status', 'Two-step', '']} rows={data.staff.map((u) => [<b key="n">{u.name}</b>, u.email,
       <select key="r" className="rounded-lg border border-[#e3e8ef] bg-white p-2 text-[13px]" value={u.role} aria-label={`Role for ${u.name}`} onChange={(e) => patch(u, { role: e.target.value })}><option value="admin">Super Admin</option><option value="compliance">Compliance</option><option value="support">Support</option><option value="finance">Finance</option></select>,
-      <StatusPill key="s" status={u.disabled ? 'suspended' : 'active'} />,
+      <StatusPill key="s" status={u.disabled ? 'suspended' : u.invitePending ? 'invited' : 'active'} />,
       <span key="m" className="text-[13px]">{u.demo ? 'Demo' : u.mfaEnabled ? 'On' : 'Set up at next sign-in'}</span>,
-      <span key="d" className="flex flex-wrap gap-3"><button className="text-[13px] underline" onClick={() => patch(u, { disabled: !u.disabled })}>{u.disabled ? 'Enable' : 'Disable'}</button>
+      <span key="d" className="flex flex-wrap gap-3">{u.invitePending && <button className="text-[13px] underline" onClick={() => resend(u)}>Resend invitation</button>}<button className="text-[13px] underline" onClick={() => patch(u, { disabled: !u.disabled })}>{u.disabled ? 'Enable' : 'Disable'}</button>
         <button className="text-[13px] underline" onClick={() => patch(u, { endSessions: true })}>Sign out</button>
         {u.mfaEnabled && <button className="text-[13px] underline" onClick={() => { if (confirm(`Reset two-step sign-in for ${u.name}? They will set it up again at their next sign-in.`)) void patch(u, { resetMfa: true }); }}>Reset two-step</button>}</span>])} />}
   </div>;

@@ -63,3 +63,12 @@ export async function verifiedDriver(call, adminToken, email, yymmdd = '880505',
   await approveAll(call, adminToken, a.data.user.id);
   return { token: t, id: a.data.user.id };
 }
+
+/** Staff are invited, not given a password (SEC-020): create the account, then accept the invitation as them. */
+export async function createStaff(call, adminToken, { name, email, role, password }) {
+  const r = await call('POST', '/admin/staff', { token: adminToken, body: { name, email, role } });
+  if (r.status !== 201) return r;
+  const token = new URL(r.data.invite.url).searchParams.get('token');
+  const set = await call('POST', '/auth/password/reset', { body: { token, newPassword: password } });
+  return { ...r, accepted: set };
+}

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { makeClient, verifiedPassenger, verifiedDriver } from './helpers.js';
+import { makeClient, verifiedPassenger, verifiedDriver, createStaff } from './helpers.js';
 
 /* ---- Stand-in Paystack API (the real one is api.paystack.co) ---- */
 const charges = new Map();
@@ -172,7 +172,7 @@ test('passenger card payment → pool, trip completes → driver wallet, card sp
   assert.equal((await call('POST', '/payments/paystack/webhook', { raw: body, headers: { 'content-type': 'application/json', 'x-paystack-signature': sig } })).status, 200);
 
   // Finance staff role
-  await call('POST', '/admin/staff', { token: admin, body: { name: 'Fin Officer', email: 'fin@drop.test', role: 'finance', password: 'Finance123' } });
+  await createStaff(call, admin, { name: 'Fin Officer', email: 'fin@drop.test', role: 'finance', password: 'Finance123' });
   const f = (await call('POST', '/auth/login', { body: { email: 'fin@drop.test', password: 'Finance123' } })).data.token;
   assert.equal((await call('GET', '/finance/overview', { token: f })).status, 200);
   assert.equal((await call('GET', '/compliance/queue', { token: f })).status, 403, 'finance cannot see ID documents');

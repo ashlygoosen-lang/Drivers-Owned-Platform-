@@ -61,7 +61,7 @@ function Page() {
   // Password reset link from email.
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('token');
-    if (window.location.pathname === '/reset-password' && t) { setModalTitle('Choose a new password'); setModal({ kind: 'reset', token: t }); }
+    if (window.location.pathname === '/reset-password' && t) { setModalTitle(new URLSearchParams(window.location.search).get('invite') ? 'Choose your password' : 'Choose a new password'); setModal({ kind: 'reset', token: t }); }
     const topic = new URLSearchParams(window.location.search).get('info');
     if (topic && topic.length < 60) { setModalTitle(topic); setModal({ kind: 'info', topic }); window.history.replaceState({}, '', '/'); }
   }, []);
