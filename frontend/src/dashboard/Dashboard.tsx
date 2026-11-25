@@ -11,6 +11,7 @@ import { WalletPanel } from './Wallet';
 import { FinanceOverviewPanel, Payouts, CardsAdmin, Ledger } from './Finance';
 import { VERIFICATION_LABEL } from '../lib/api';
 import { TripComms } from '../components/TripComms';
+import { MfaSetup } from '../components/TwoStep';
 import { LiveMap, useDriverGps, GpsStatus } from '../components/LiveMap';
 import { FleetMap } from './FleetMap';
 
@@ -21,7 +22,7 @@ const TABS = {
   compliance: ['Overview', 'Verification queue', 'Expiring documents', 'Audit log', 'Notifications', 'Profile'],
   support: ['Overview', 'Live map', 'Tickets', 'Enquiries', 'Users', 'Bookings', 'Notifications', 'Profile'],
   finance: ['Overview', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Bookings', 'Users', 'Notifications', 'Profile'],
-  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications'],
+  admin: ['Overview', 'Live map', 'Verification queue', 'Applications', 'Drivers', 'Users', 'Bookings', 'Finance', 'Payouts', 'Cards', 'Ledger', 'Tickets', 'Enquiries', 'Expiring documents', 'Audit log', 'Staff', 'Notifications', 'Profile'],
 } as const;
 
 function Overview({ onAction, actionLabel }: { onAction: () => void; actionLabel: string }) {
@@ -53,8 +54,30 @@ function Trips({ onTrack, onBook, driver = false }: { onTrack: (b: Booking) => v
   ])} />;
 }
 
+/** Two-step sign-in and "sign out everywhere". */
+function AccountSecurity({ notify }: { notify: Notify }) {
+  const { user, setUser, signOut } = useAuth();
+  const [setup, setSetup] = useState(false);
+  const [disabling, setDisabling] = useState(false);
+  const [error, setError] = useState('');
+  if (!user || user.demo) return null;
+  const staff = ['admin', 'compliance', 'support', 'finance'].includes(user.role);
+  return <section className="mt-4 grid gap-3 rounded-xl border border-[#d2dae4] p-4" aria-label="Sign-in security">
+    <h4 className="flex items-center gap-2 font-semibold"><Icon name="shield" size={18} />Sign-in security</h4>
+    {setup ? <MfaSetup onDone={(r) => { setUser(r.user); setSetup(false); notify('Two-step sign-in is on.'); }} />
+      : user.mfaEnabled ? <p className="text-sm">Two-step sign-in is <b>on</b>. You’ll enter a code from your authenticator app when you sign in.{!staff && <> <button type="button" className="underline" onClick={() => setDisabling(!disabling)}>Turn off</button></>}</p>
+        : <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm">Add a code from your phone when you sign in, so a stolen password isn’t enough.</p><button type="button" className={outline} onClick={() => setSetup(true)}>Turn on two-step sign-in</button></div>}
+    {disabling && <form className="grid gap-3 md:grid-cols-3" onSubmit={async (e) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); try { setUser((await api<{ user: User }>('/auth/mfa/disable', { body: f })).user); setDisabling(false); notify('Two-step sign-in is off.'); } catch (err) { setError((err as Error).message); } }}>
+      <input name="password" type="password" required placeholder="Password" autoComplete="current-password" className={input} aria-label="Password" />
+      <input name="code" required inputMode="numeric" placeholder="6-digit code" className={input} aria-label="Authenticator code" />
+      <button className={outline}>Turn off</button></form>}
+    <ErrorText>{error}</ErrorText>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e3e8ef] pt-3"><p className="text-sm">Lost a phone or signed in somewhere public?</p><button type="button" className={outline} onClick={async () => { try { await api('/auth/logout-all', { body: {} }); signOut(); notify('You’ve been signed out on all devices.'); } catch (err) { setError((err as Error).message); } }}>Sign out everywhere</button></div>
+  </section>;
+}
+
 function ProfileForm({ notify, places = false }: { notify: Notify; places?: boolean }) {
-  const { user, setUser } = useAuth();
+  const { user, setUser, signIn } = useAuth();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   if (!user) return null;
@@ -67,7 +90,10 @@ function ProfileForm({ notify, places = false }: { notify: Notify; places?: bool
       ? { savedPlaces: { home: f.home, work: f.work }, paymentPreference: f.paymentPreference }
       : { name: f.name, phone: f.phone, notifications: f.notifications, ...(f.company !== undefined && { company: f.company }), ...(f.newPassword && { newPassword: f.newPassword, currentPassword: f.currentPassword }) };
     setBusy(true); setError('');
-    try { setUser((await api<{ user: User }>('/auth/me', { method: 'PATCH', body })).user); notify('Your changes have been saved.'); }
+    try {
+      const r = await api<{ user: User; token?: string }>('/auth/me', { method: 'PATCH', body });
+      if (r.token) { signIn(r.token, r.user); notify('Password changed. You’ve been signed out on your other devices.'); } else { setUser(r.user); notify('Your changes have been saved.'); }
+    }
     catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   return <form className="grid max-w-xl gap-4" onSubmit={submit}>
@@ -84,6 +110,7 @@ function ProfileForm({ notify, places = false }: { notify: Notify; places?: bool
     </>}
     <ErrorText>{error}</ErrorText>
     <button className={button} disabled={busy}>{busy && <Spinner />}Save changes</button>
+    {!places && <AccountSecurity notify={notify} />}
   </form>;
 }
 

@@ -3,6 +3,7 @@ import { api, type User } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { button, outline, input, Field, ErrorText, Icon, Spinner } from '../components/ui';
 import { DemoPicker } from './DemoPicker';
+import { MfaSetup, MfaVerify } from '../components/TwoStep';
 
 type Mode = 'signin' | 'register';
 
@@ -14,6 +15,8 @@ export function AuthForm({ initialMode = 'signin', onDone, onDriver, note, showD
   const [accountType, setAccountType] = useState<'passenger' | 'business'>('passenger');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<{ kind: 'verify' | 'setup'; mfaToken: string } | null>(null);
+  const finish = (r: { token?: string; user: User }) => { if (r.token) signIn(r.token, r.user); onDone(r.user); };
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -21,17 +24,21 @@ export function AuthForm({ initialMode = 'signin', onDone, onDriver, note, showD
     setError('');
     setBusy(true);
     try {
+      type Res = { token: string; user: User; mfa?: 'verify' | 'setup'; mfaToken?: string };
       const res = mode === 'signin'
-        ? await api<{ token: string; user: User }>('/auth/login', { body: { email: f.email, password: f.password } })
-        : await api<{ token: string; user: User }>('/auth/register', { body: { ...f, role: accountType } });
-      signIn(res.token, res.user);
-      onDone(res.user);
+        ? await api<Res>('/auth/login', { body: { email: f.email, password: f.password } })
+        : await api<Res>('/auth/register', { body: { ...f, role: accountType } });
+      if (res.mfa && res.mfaToken) { setStep({ kind: res.mfa, mfaToken: res.mfaToken }); return; }
+      finish(res);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(false);
     }
   }
+
+  if (step?.kind === 'verify') return <MfaVerify mfaToken={step.mfaToken} onDone={finish} onBack={() => setStep(null)} />;
+  if (step?.kind === 'setup') return <MfaSetup mfaToken={step.mfaToken} onDone={finish} required />;
 
   return <div className="grid gap-5">
     {note && <p className="rounded-lg bg-[#e3eaf2] p-3 text-sm leading-6 text-forest">{note}</p>}

@@ -11,7 +11,7 @@ export interface User {
   id: string; name: string; email: string; phone: string; role: Role; company?: string;
   driverStatus?: 'pending' | 'approved' | 'suspended'; online?: boolean; vehicle?: string; rating?: number | null;
   savedPlaces?: { home: string; work: string }; paymentPreference?: string; notifications?: string;
-  employees?: Employee[]; disabled?: boolean; createdAt: string; verificationStatus?: VerificationStatus; demo?: boolean;
+  employees?: Employee[]; disabled?: boolean; createdAt: string; verificationStatus?: VerificationStatus; demo?: boolean; mfaEnabled?: boolean;
 }
 export interface Employee { id: string; name: string; email: string; department: string; addedAt: string }
 export interface FareOption { category: string; description: string; seats: number; fare: number; passengerCommission: number; driverServiceFee: number; driverEarnings: number; etaMin: number }
@@ -103,7 +103,7 @@ export interface Withdrawal { id: string; ref: string; amount: number; fee: numb
 export interface Wallet {
   balance: number; pendingWithdrawals: number; transactions: WalletTx[]; declined: { id: string; merchant: string; amount: number; reason: string; createdAt: string }[];
   card: DropCard | null; cardProgramme: { enabled: boolean; sandbox: boolean; name: string; limits: { perTransaction: number; daily: number; spentToday: number; atm: boolean } };
-  bankAccount: { holder: string; bank: string; branchCode: string; accountType: string; masked: string } | null;
+  bankAccount: { holder: string; bank: string; branchCode: string; accountType: string; masked: string; holdUntil?: string | null } | null;
   withdrawals: Withdrawal[]; rules: { minWithdrawal: number; withdrawalFee: number; cashDebtLimit: number }; banks: string[];
 }
 export interface FinanceOverview { balanced: boolean; pool: number; escrow: number; driverWallets: number; driversInDebt: number; fees: number; cardSettlement: number; payoutsPending: number; businessReceivable: number; cardSpendToday: number; cardTransactionsToday: number; activeCards: number; withdrawalsRequested: number; providers: { paystack: string; paymentology: string; cardsEnabled: boolean }; accounts: { account: string; balance: number }[] }

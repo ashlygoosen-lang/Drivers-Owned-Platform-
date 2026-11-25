@@ -4,6 +4,7 @@ import path from 'node:path';
 import { db, now } from '../db.js';
 import { UPLOAD_DIR } from '../config.js';
 import { requireRole, publicUser, hashPassword, STAFF_ROLES } from '../auth.js';
+import { assertNotBreached } from './auth.js';
 import { getVerification, recompute } from '../kyc.js';
 import { id as newId } from '../db.js';
 import { email, password } from '../validate.js';
@@ -40,6 +41,7 @@ router.patch('/admin/users/:id', wrap(async (req, res) => {
   if (user.id === req.user.id && req.body.disabled) throw bad('You cannot suspend your own account.');
   const patch = {};
   if (req.body.disabled !== undefined) patch.disabled = Boolean(req.body.disabled);
+  if (req.body.endSessions || patch.disabled) patch.tokenVersion = (user.tokenVersion || 0) + 1;
   if (req.body.driverStatus !== undefined && user.role === 'driver') {
     patch.driverStatus = oneOf(req.body.driverStatus, ['pending', 'approved', 'suspended'], 'Driver status');
     if (patch.driverStatus === 'approved') {
@@ -135,7 +137,7 @@ router.post('/admin/staff', wrap(async (req, res) => {
   if (db.find('users', (u) => u.email === addr)) throw new HttpError(409, 'An account with this email already exists.');
   const user = db.insert('users', {
     id: newId(), name: str(b.name, 'Full name', { min: 2, max: 80 }), email: addr, phone: '',
-    role: oneOf(b.role, STAFF_ROLES, 'Role'), passwordHash: await hashPassword(password(b.password)), createdAt: now(), createdBy: req.user.email,
+    role: oneOf(b.role, STAFF_ROLES, 'Role'), passwordHash: await hashPassword(await (async (pw) => { await assertNotBreached(pw); return pw; })(password(b.password))), createdAt: now(), createdBy: req.user.email,
   });
   res.status(201).json({ user: publicUser(user) });
 }));
@@ -147,6 +149,8 @@ router.patch('/admin/staff/:id', wrap(async (req, res) => {
   const patch = {};
   if (req.body.role) patch.role = oneOf(req.body.role, STAFF_ROLES, 'Role');
   if (req.body.disabled !== undefined) patch.disabled = Boolean(req.body.disabled);
+  if (req.body.resetMfa) patch.mfa = null; // they set it up again at next sign-in
+  if (patch.role || patch.disabled || req.body.resetMfa || req.body.endSessions) patch.tokenVersion = (user.tokenVersion || 0) + 1;
   res.json({ user: publicUser(db.update('users', user.id, patch)) });
 }));
 

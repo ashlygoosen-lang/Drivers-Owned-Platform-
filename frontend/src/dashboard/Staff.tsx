@@ -29,10 +29,13 @@ export function StaffManager({ notify }: { notify: Notify }) {
       <div className="md:col-span-2"><ErrorText>{error}</ErrorText><button className={button}><Icon name="plus" size={16} />Add staff member</button></div>
     </form>
     <ul className="grid gap-2 text-[13px] text-[#5b6b82]">{Object.values(ROLE_INFO).map((r) => <li key={r}>• {r}</li>)}</ul>
-    {!data ? <Loading /> : <Table head={['Name', 'Email', 'Role', 'Status', '']} rows={data.staff.map((u) => [<b key="n">{u.name}</b>, u.email,
+    {!data ? <Loading /> : <Table head={['Name', 'Email', 'Role', 'Status', 'Two-step', '']} rows={data.staff.map((u) => [<b key="n">{u.name}</b>, u.email,
       <select key="r" className="rounded-lg border border-[#e3e8ef] bg-white p-2 text-[13px]" value={u.role} aria-label={`Role for ${u.name}`} onChange={(e) => patch(u, { role: e.target.value })}><option value="admin">Super Admin</option><option value="compliance">Compliance</option><option value="support">Support</option><option value="finance">Finance</option></select>,
       <StatusPill key="s" status={u.disabled ? 'suspended' : 'active'} />,
-      <button key="d" className="text-[13px] underline" onClick={() => patch(u, { disabled: !u.disabled })}>{u.disabled ? 'Enable' : 'Disable'}</button>])} />}
+      <span key="m" className="text-[13px]">{u.demo ? 'Demo' : u.mfaEnabled ? 'On' : 'Set up at next sign-in'}</span>,
+      <span key="d" className="flex flex-wrap gap-3"><button className="text-[13px] underline" onClick={() => patch(u, { disabled: !u.disabled })}>{u.disabled ? 'Enable' : 'Disable'}</button>
+        <button className="text-[13px] underline" onClick={() => patch(u, { endSessions: true })}>Sign out</button>
+        {u.mfaEnabled && <button className="text-[13px] underline" onClick={() => { if (confirm(`Reset two-step sign-in for ${u.name}? They will set it up again at their next sign-in.`)) void patch(u, { resetMfa: true }); }}>Reset two-step</button>}</span>])} />}
   </div>;
 }
 
