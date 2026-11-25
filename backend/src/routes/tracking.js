@@ -6,6 +6,7 @@ import { emit } from '../comms/hub.js';
 import { browserKey, serverKey, locate, drivingRoute, distanceKm, roughEta, validPoint, bearing } from '../tracking/geo.js';
 import { setLocation, getLocation, allLocations } from '../tracking/locations.js';
 import * as kv from '../kv.js';
+import { securityEvent } from '../monitor.js';
 
 /**
  * Real-time vehicle tracking.
@@ -28,6 +29,24 @@ const routes = new Map(); // bookingId -> { route, stage, origin, at, version }
 const spotKey = (bookingId) => `spot:${bookingId}`;
 const getSpot = async (bookingId) => { const r = await kv.get(spotKey(bookingId)); return r ? JSON.parse(r) : null; };
 const lastFix = new Map(); // driverId -> ms
+
+/*
+ * GPS plausibility (SEC-021). A modified app can post any coordinates. Fixes that imply a speed no
+ * car on a South African road reaches are ignored (not stored, not sent to the passenger), and
+ * repeated jumps raise a security event for operations to review. Drivers are not blocked
+ * automatically: real GPS also jumps (tunnels, cold starts), so a human decides.
+ */
+export const MAX_SPEED_MS = Number(process.env.GPS_MAX_SPEED_MS || 70); // ≈ 250 km/h
+const JUMP_GRACE_KM = 0.3; // GPS noise and drift allowance
+export function implausible(prev, fix, nowMs = Date.now()) {
+  if (Number.isFinite(fix.speed) && fix.speed > MAX_SPEED_MS) return 'reported_speed';
+  if (!prev?.at || prev.source !== 'gps') return null;
+  const dt = (nowMs - Date.parse(prev.at)) / 1000;
+  if (!(dt > 0) || dt > 600) return null; // after 10 minutes the old fix proves nothing
+  const km = distanceKm(prev, fix);
+  if (km > JUMP_GRACE_KM && (km * 1000) / dt > MAX_SPEED_MS) return 'teleport';
+  return null;
+}
 
 /** Pickup and destination coordinates, looked up once and stored on the booking. */
 export async function tripPoints(b) {
@@ -106,6 +125,20 @@ router.post('/drivers/location', requireRole('driver'), wrap(async (req, res) =>
   if (!me.online && !active) return res.json({ ok: false, reason: 'offline' }); // only track while working
   if (Date.now() - (lastFix.get(me.id) || 0) < 1000) return res.json({ ok: false, reason: 'throttled' });
   lastFix.set(me.id, Date.now());
+  const why = implausible(await getLocation(me.id), fix);
+  if (why) {
+    const strikes = await kv.incr(`gpsjump:${me.id}`, 600);
+    if (strikes === 3) securityEvent('gps_implausible', { userId: me.id, reason: why, bookingId: active?.id || null }, 'high');
+    // If the stored fix was the outlier, the phone keeps reporting the new place: two consistent
+    // fixes there are accepted, so a real GPS glitch never freezes a driver on the map.
+    const candKey = `gpscand:${me.id}`;
+    const cand = JSON.parse((await kv.get(candKey)) || 'null');
+    if (why === 'reported_speed' || !cand || implausible({ ...cand, source: 'gps' }, fix)) {
+      await kv.set(candKey, JSON.stringify({ lat: fix.lat, lng: fix.lng, at: now() }), 120);
+      return res.json({ ok: false, reason: 'implausible' });
+    }
+    await kv.del(candKey);
+  }
   const out = await updateDriverLocation(me, fix, 'gps');
   res.json({ ok: true, eta: out.eta || null, bookingId: out.booking?.id || null });
 }));
@@ -134,7 +167,7 @@ export function onTrackingStatus(b) {
 /* ---------- live view of one trip ---------- */
 
 router.get('/bookings/:id/tracking', requireAuth, wrap(async (req, res) => {
-  const b = await db.findFresh('bookings', (x) => x.id === req.params.id || x.ref === req.params.id);
+  const b = await db.byIdFresh('bookings', req.params.id);
   const u = req.user;
   const side = b && (b.userId === u.id ? 'passenger' : b.driverId === u.id ? 'driver' : null);
   if (!b || (!side && !FLEET_ROLES.includes(u.role))) throw new HttpError(404, 'Trip not found.');

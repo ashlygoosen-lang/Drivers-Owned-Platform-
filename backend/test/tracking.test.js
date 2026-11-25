@@ -65,7 +65,7 @@ test('driver GPS reaches the passenger live with a Google route and ETA; staff f
   assert.equal((await call('POST', '/drivers/location', { token: d.token, body: { lat: -33.93, lng: 18.45 } })).data.reason, 'offline');
   await call('POST', '/drivers/online', { token: d.token, body: { online: true } });
   assert.equal((await call('POST', '/drivers/location', { token: d.token, body: { lat: 999, lng: 18 } })).status, 400);
-  assert.equal((await call('POST', '/drivers/location', { token: d.token, body: { lat: -33.93, lng: 18.45, accuracy: 12 } })).data.ok, true);
+  assert.equal((await call('POST', '/drivers/location', { token: d.token, body: { lat: -33.9349, lng: 18.4549, accuracy: 12 } })).data.ok, true);
 
   // Staff fleet map shows the available driver and the open request
   let fleet = (await call('GET', '/admin/fleet', { token: admin })).data;
@@ -115,4 +115,20 @@ test('driver GPS reaches the passenger live with a Google route and ETA; staff f
   t = (await call('GET', `/bookings/${b.id}/tracking`, { token: p.token })).data;
   assert.equal(t.driver, null, 'live position stops when the trip ends');
   assert.ok(t.trail.length >= 1);
+});
+
+test('impossible GPS jumps are ignored, flagged after repeats, and a real glitch recovers (SEC-021)', async () => {
+  const admin = (await call('POST', '/auth/login', { body: { email: 'admin@drop.test', password: 'AdminPass123' } })).data.token;
+  const d = await verifiedDriver(call, admin, 'jumpy@example.com', '850505', '5009081');
+  await call('POST', '/drivers/online', { token: d.token, body: { online: true } });
+  const fix = async (lat, lng, extra = {}) => { await new Promise((r) => setTimeout(r, 1050)); return (await call('POST', '/drivers/location', { token: d.token, body: { lat, lng, accuracy: 10, ...extra } })).data; };
+
+  assert.equal((await fix(-33.92, 18.42)).ok, true);
+  assert.equal((await fix(-33.921, 18.421)).ok, true, 'normal driving is accepted');
+  assert.equal((await fix(-33.93, 18.43, { speed: 120 })).reason, 'implausible', 'reported speed above 250 km/h');
+  assert.equal((await fix(-26.2, 28.04)).reason, 'implausible', 'Cape Town to Johannesburg in a second');
+  const before = db.all('securityEvents').filter((e) => e.type === 'gps_implausible').length;
+  assert.equal((await fix(-26.2001, 28.0401)).ok, true, 'two consistent fixes at the new place are accepted (stored fix was the outlier)');
+  assert.equal((await fix(-33.92, 18.42)).reason, 'implausible');
+  assert.equal(db.all('securityEvents').filter((e) => e.type === 'gps_implausible').length, before + 1, 'third jump in 10 minutes alerts operations');
 });
