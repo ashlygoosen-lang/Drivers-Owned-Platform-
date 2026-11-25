@@ -4,6 +4,8 @@ import { requireAuth, requireRole } from '../auth.js';
 import { wrap, bad, HttpError } from '../validate.js';
 import { emit } from '../comms/hub.js';
 import { browserKey, serverKey, locate, drivingRoute, distanceKm, roughEta, validPoint, bearing } from '../tracking/geo.js';
+import { setLocation, getLocation, allLocations } from '../tracking/locations.js';
+import * as kv from '../kv.js';
 
 /**
  * Real-time vehicle tracking.
@@ -22,7 +24,9 @@ const STALE_MS = 2 * 60_000;
 
 const stageOf = (b) => (b.status === 'in_progress' ? 'to_destination' : ['accepted', 'arriving'].includes(b.status) ? 'to_pickup' : b.status);
 const routes = new Map(); // bookingId -> { route, stage, origin, at, version }
-const passengerSpots = new Map(); // bookingId -> { lat, lng, accuracy, at } (memory only)
+// Passenger's shared pickup spot: Redis with a 10-minute expiry (never written to the database).
+const spotKey = (bookingId) => `spot:${bookingId}`;
+const getSpot = async (bookingId) => { const r = await kv.get(spotKey(bookingId)); return r ? JSON.parse(r) : null; };
 const lastFix = new Map(); // driverId -> ms
 
 /** Pickup and destination coordinates, looked up once and stored on the booking. */
@@ -54,10 +58,10 @@ async function etaFor(b, loc) {
 
 /** Record a driver's position, keep the trip trail and push it to the passenger on the active trip. */
 export async function updateDriverLocation(driver, fix, source = 'gps') {
-  const prev = driver.location;
+  const prev = await getLocation(driver.id);
   const heading = Number.isFinite(fix.heading) && fix.heading >= 0 ? fix.heading : prev && distanceKm(prev, fix) > 0.005 ? bearing(prev, fix) : prev?.heading ?? 0;
   const location = { lat: +fix.lat.toFixed(6), lng: +fix.lng.toFixed(6), heading: Math.round(heading), speed: Number.isFinite(fix.speed) ? Math.max(0, +fix.speed.toFixed(1)) : null, accuracy: Number.isFinite(fix.accuracy) ? Math.round(fix.accuracy) : null, at: now(), source };
-  db.update('users', driver.id, { location });
+  await setLocation(driver.id, location);
   const b = db.find('bookings', (x) => x.driverId === driver.id && ACTIVE.includes(x.status));
   if (!b) return { location, booking: null };
   const trail = b.trail || [];
@@ -92,7 +96,7 @@ router.get('/maps/config', (_req, res) => {
 /* ---------- driver GPS ---------- */
 
 router.post('/drivers/location', requireRole('driver'), wrap(async (req, res) => {
-  const me = db.find('users', (u) => u.id === req.user.id);
+  const me = db.byId('users', req.user.id);
   if (me.driverStatus !== 'approved') throw new HttpError(403, 'Your driver account is not active.');
   const b = req.body || {};
   const fix = { lat: num(b.lat), lng: num(b.lng), heading: num(b.heading), speed: num(b.speed), accuracy: num(b.accuracy) };
@@ -109,41 +113,42 @@ router.post('/drivers/location', requireRole('driver'), wrap(async (req, res) =>
 /* ---------- passenger shares their spot with the driver (until pickup) ---------- */
 
 router.post('/bookings/:id/my-location', requireAuth, wrap(async (req, res) => {
-  const b = db.find('bookings', (x) => x.id === req.params.id);
+  const b = db.byId('bookings', req.params.id);
   if (!b || b.userId !== req.user.id) throw new HttpError(404, 'Trip not found.');
-  if (req.body?.stop) { passengerSpots.delete(b.id); if (b.driverId) emit(b.driverId, 'passenger-location', { bookingId: b.id, passenger: null }); return res.json({ ok: true, sharing: false }); }
+  if (req.body?.stop) { await kv.del(spotKey(b.id)); if (b.driverId) emit(b.driverId, 'passenger-location', { bookingId: b.id, passenger: null }); return res.json({ ok: true, sharing: false }); }
   if (!b.driverId || !['accepted', 'arriving'].includes(b.status)) throw bad('You can share your location once a driver is on the way.');
   const lat = num(req.body?.lat); const lng = num(req.body?.lng);
   if (!validPoint(lat, lng)) throw bad('Invalid location.');
   const spot = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), accuracy: Number.isFinite(num(req.body?.accuracy)) ? Math.round(num(req.body.accuracy)) : null, at: now() };
-  passengerSpots.set(b.id, spot);
+  await kv.set(spotKey(b.id), JSON.stringify(spot), 600);
   emit(b.driverId, 'passenger-location', { bookingId: b.id, passenger: spot });
   res.json({ ok: true, sharing: true });
 }));
 
 /** Stop sharing the passenger's location once they are in the car or the trip ends. */
 export function onTrackingStatus(b) {
-  if (!['accepted', 'arriving'].includes(b.status)) passengerSpots.delete(b.id);
+  if (!['accepted', 'arriving'].includes(b.status)) void kv.del(spotKey(b.id));
   if (!ACTIVE.includes(b.status)) routes.delete(b.id);
 }
 
 /* ---------- live view of one trip ---------- */
 
 router.get('/bookings/:id/tracking', requireAuth, wrap(async (req, res) => {
-  const b = db.find('bookings', (x) => x.id === req.params.id || x.ref === req.params.id);
+  const b = await db.findFresh('bookings', (x) => x.id === req.params.id || x.ref === req.params.id);
   const u = req.user;
   const side = b && (b.userId === u.id ? 'passenger' : b.driverId === u.id ? 'driver' : null);
   if (!b || (!side && !FLEET_ROLES.includes(u.role))) throw new HttpError(404, 'Trip not found.');
   const pts = await tripPoints(b);
-  const driver = b.driverId ? db.find('users', (x) => x.id === b.driverId) : null;
-  const live = ACTIVE.includes(b.status) && driver?.location ? driver.location : null;
+  const driver = b.driverId ? db.byId('users', b.driverId) : null;
+  const driverLoc = driver ? await getLocation(driver.id) : null;
+  const live = ACTIVE.includes(b.status) && driverLoc ? driverLoc : null;
   const { stage, eta, route } = live ? await etaFor(b, live) : { stage: stageOf(b), eta: null, route: null };
   res.json({
     bookingId: b.id, ref: b.ref, status: b.status, stage,
     pickup: pts.pickup && { ...pts.pickup, label: b.pickup },
     destination: pts.destination && { ...pts.destination, label: b.destination },
     driver: live && { ...live, stale: Date.now() - Date.parse(live.at) > STALE_MS, name: driver.name.split(' ')[0], vehicle: driver.vehicle || '' },
-    passenger: (side === 'driver' || FLEET_ROLES.includes(u.role)) ? passengerSpots.get(b.id) || null : null,
+    passenger: (side === 'driver' || FLEET_ROLES.includes(u.role)) ? await getSpot(b.id) : null,
     eta, route,
     // The route actually driven: for staff, and for both parties once the trip is over.
     trail: (FLEET_ROLES.includes(u.role) || ['completed', 'cancelled'].includes(b.status)) ? (b.trail || []).map(([lat, lng]) => [lat, lng]) : [],
@@ -154,8 +159,10 @@ router.get('/bookings/:id/tracking', requireAuth, wrap(async (req, res) => {
 
 router.get('/admin/fleet', requireRole(...FLEET_ROLES), wrap(async (_req, res) => {
   const cutoff = Date.now() - 15 * 60_000;
-  const drivers = db.filter('users', (u) => u.role === 'driver' && u.driverStatus === 'approved' && u.location && Date.parse(u.location.at) > cutoff && (u.online || db.find('bookings', (b) => b.driverId === u.id && ACTIVE.includes(b.status))))
+  const locs = await allLocations();
+  const drivers = db.filter('users', (u) => u.role === 'driver' && u.driverStatus === 'approved' && locs.get(u.id) && Date.parse(locs.get(u.id).at) > cutoff && (u.online || db.find('bookings', (b) => b.driverId === u.id && ACTIVE.includes(b.status))))
     .map((u) => {
+      u = { ...u, location: locs.get(u.id) };
       const trip = db.find('bookings', (b) => b.driverId === u.id && ACTIVE.includes(b.status));
       return { id: u.id, name: u.name, vehicle: u.vehicle || '', rating: u.rating || null, ...u.location, stale: Date.now() - Date.parse(u.location.at) > STALE_MS, state: trip ? 'on_trip' : 'available', trip: trip ? { id: trip.id, ref: trip.ref, status: trip.status, pickup: trip.pickup, destination: trip.destination } : null };
     });

@@ -1,6 +1,7 @@
 import { db } from '../db.js';
 import { updateDriverLocation } from '../routes/tracking.js';
 import { distanceKm } from './geo.js';
+import { getLocation } from './locations.js';
 
 /**
  * Demo only: drives the demo driver's car along Cape Town roads so the live map can be tried
@@ -28,9 +29,10 @@ function advance(path, s) {
 
 async function tick() {
   for (const b of db.filter('bookings', (x) => x.demoLive && ['accepted', 'arriving', 'in_progress'].includes(x.status))) {
-    const driver = db.find('users', (u) => u.id === b.driverId);
+    const driver = db.byId('users', b.driverId);
     if (!driver) continue;
-    if (driver.location?.source === 'gps' && Date.now() - Date.parse(driver.location.at) < 60_000) continue; // a real phone is reporting
+    const loc = await getLocation(driver.id);
+    if (loc?.source === 'gps' && Date.now() - Date.parse(loc.at) < 60_000) continue; // a real phone is reporting
     const stage = b.status === 'in_progress' ? 'trip' : 'approach';
     let s = state.get(b.id);
     if (!s || s.stage !== stage) { s = { stage, leg: 0, t: 0, parkedAt: 0 }; state.set(b.id, s); }

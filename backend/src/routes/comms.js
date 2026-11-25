@@ -3,7 +3,7 @@ import { db, id, now } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { notify, audit } from '../kyc.js';
 import { str, oneOf, wrap, bad, HttpError } from '../validate.js';
-import { issueTicket, redeemTicket, subscribe, emit, isOnline } from '../comms/hub.js';
+import { issueTicket, redeemTicket, subscribe, emit, isOnlineAnywhere } from '../comms/hub.js';
 import { phoneMode, e164, bridgeCall, iceServers } from '../comms/phone.js';
 import { pushTo, hasDevices } from '../push.js';
 
@@ -29,14 +29,14 @@ export function commsOpen(b) {
 }
 
 /** The booking plus who is on each side, for one of its two participants. */
-function party(req, { staff = false } = {}) {
-  const b = db.find('bookings', (x) => x.id === req.params.id || x.ref === req.params.id);
+async function party(req, { staff = false } = {}) {
+  const b = await db.findFresh('bookings', (x) => x.id === req.params.id || x.ref === req.params.id);
   const u = req.user;
   if (!b) throw new HttpError(404, 'Trip not found.');
   const side = b.userId === u.id ? 'passenger' : b.driverId === u.id ? 'driver' : null;
   if (!side && !(staff && STAFF_READ.includes(u.role))) throw new HttpError(404, 'Trip not found.');
   const otherId = side === 'passenger' ? b.driverId : side === 'driver' ? b.userId : null;
-  const other = otherId ? db.find('users', (x) => x.id === otherId) : null;
+  const other = otherId ? db.byId('users', otherId) : null;
   return { b, side, other };
 }
 
@@ -60,8 +60,8 @@ function throttle(userId, max = 20) {
 }
 
 const lastPing = new Map();
-function pushOrNotify(userId, booking, title, body) {
-  if (isOnline(userId)) return;
+async function pushOrNotify(userId, booking, title, body) {
+  if (await isOnlineAnywhere(userId)) return;
   const key = `${userId}:${booking.id}`;
   if (Date.now() - (lastPing.get(key) || 0) < 5 * 60_000) return;
   lastPing.set(key, Date.now());
@@ -80,14 +80,14 @@ router.get('/comms/config', requireAuth, (req, res) => {
   res.json({ iceServers: iceServers(req.user.id), phone: phoneMode(), windowHours: windowHours(), ringSeconds: RING_MS / 1000 });
 });
 
-router.post('/comms/ticket', requireAuth, (req, res) => res.json({ ticket: issueTicket(req.user.id) }));
+router.post('/comms/ticket', requireAuth, wrap(async (req, res) => res.json({ ticket: await issueTicket(req.user.id) })));
 
-router.get('/comms/stream', (req, res) => {
-  const userId = redeemTicket(req.query.ticket);
+router.get('/comms/stream', wrap(async (req, res) => {
+  const userId = await redeemTicket(req.query.ticket);
   const user = userId && db.find('users', (u) => u.id === userId && !u.disabled);
   if (!user) return res.status(401).json({ error: 'Please sign in again.' });
   subscribe(user.id, req, res);
-});
+}));
 
 /** Trips the signed-in user can talk on right now (for the notification badge and quick access). */
 router.get('/comms/threads', requireAuth, (req, res) => {
@@ -96,7 +96,7 @@ router.get('/comms/threads', requireAuth, (req, res) => {
     threads: mine.map((b) => {
       const msgs = db.filter('messages', (m) => m.bookingId === b.id);
       const otherId = b.userId === req.user.id ? b.driverId : b.userId;
-      const other = db.find('users', (u) => u.id === otherId);
+      const other = db.byId('users', otherId);
       return { bookingId: b.id, ref: b.ref, status: b.status, with: firstName(other?.name), unread: msgs.filter((m) => m.senderId && m.senderId !== req.user.id && !m.readAt).length, last: msgs.at(-1) ? shape(msgs.at(-1), req.user.id) : null };
     }),
   });
@@ -105,34 +105,34 @@ router.get('/comms/threads', requireAuth, (req, res) => {
 /* ---------- messages ---------- */
 
 router.get('/bookings/:id/messages', requireAuth, wrap(async (req, res) => {
-  const { b, side, other } = party(req, { staff: true });
+  const { b, side, other } = await party(req, { staff: true });
   if (!side) audit(req.user, 'trip_messages_viewed', b.userId, { booking: b.ref });
   const messages = db.filter('messages', (m) => m.bookingId === b.id).map((m) => shape(m, req.user.id));
   const calls = db.filter('calls', (c) => c.bookingId === b.id).map((c) => ({ id: c.id, kind: c.kind, status: c.status, by: c.callerId === req.user.id ? 'me' : 'them', durationSec: c.durationSec || 0, createdAt: c.createdAt }));
   res.json({
     messages, calls, open: commsOpen(b), side, phone: phoneMode(),
-    with: other ? { name: firstName(other.name), role: side === 'passenger' ? 'driver' : 'passenger', online: isOnline(other.id) } : null,
+    with: other ? { name: firstName(other.name), role: side === 'passenger' ? 'driver' : 'passenger', online: await isOnlineAnywhere(other.id) } : null,
   });
 }));
 
 router.post('/bookings/:id/messages', requireAuth, wrap(async (req, res) => {
-  const { b, side, other } = party(req);
+  const { b, side, other } = await party(req);
   requireOpen(b);
   throttle(req.user.id);
   const text = str(req.body?.text, 'Message', { max: 1000 });
   const m = db.insert('messages', { id: id(), bookingId: b.id, senderId: req.user.id, senderRole: side, senderName: firstName(req.user.name), kind: 'text', text, createdAt: now() });
   emit(other.id, 'message', shape(m, other.id));
-  pushOrNotify(other.id, b, `New message from ${firstName(req.user.name)}`, `${b.ref}: ${text.slice(0, 120)}`);
-  if (!isOnline(other.id)) void pushTo(other.id, { title: firstName(req.user.name), body: text.slice(0, 140), data: { type: 'message', bookingId: b.id } });
+  void pushOrNotify(other.id, b, `New message from ${firstName(req.user.name)}`, `${b.ref}: ${text.slice(0, 120)}`);
+  if (!(await isOnlineAnywhere(other.id))) void pushTo(other.id, { title: firstName(req.user.name), body: text.slice(0, 140), data: { type: 'message', bookingId: b.id } });
   res.status(201).json({ message: shape(m, req.user.id) });
 }));
 
 router.post('/bookings/:id/messages/read', requireAuth, wrap(async (req, res) => {
-  const { b, other } = party(req);
+  const { b, other } = await party(req);
   const at = now();
   let n = 0;
-  for (const m of db.filter('messages', (x) => x.bookingId === b.id && x.senderId && x.senderId !== req.user.id && !x.readAt)) { m.readAt = at; n++; }
-  if (n) { db.save(); if (other) emit(other.id, 'read', { bookingId: b.id, at }); }
+  for (const m of db.filter('messages', (x) => x.bookingId === b.id && x.senderId && x.senderId !== req.user.id && !x.readAt)) { db.update('messages', m.id, { readAt: at }); n++; }
+  if (n) { if (other) emit(other.id, 'read', { bookingId: b.id, at }); }
   res.json({ read: n });
 }));
 
@@ -146,7 +146,7 @@ function endCall(call, status, byId) {
   const durationSec = call.answeredAt ? Math.round((Date.now() - Date.parse(call.answeredAt)) / 1000) : 0;
   const updated = db.update('calls', call.id, { status, endedAt: now(), endedBy: byId || null, durationSec });
   for (const uid of [call.callerId, call.calleeId]) emit(uid, 'call:ended', { callId: call.id, bookingId: call.bookingId, status, by: byId === uid ? 'me' : 'them', durationSec });
-  const b = db.find('bookings', (x) => x.id === call.bookingId);
+  const b = db.byId('bookings', call.bookingId);
   const label = call.kind === 'video' ? 'Video call' : 'Voice call';
   if (status === 'missed' || status === 'declined') {
     system(b, `${status === 'missed' ? 'Missed' : 'Declined'} ${label.toLowerCase()}`);
@@ -158,13 +158,13 @@ function endCall(call, status, byId) {
 }
 
 function loadCall(req) {
-  const call = db.find('calls', (c) => c.id === req.params.callId);
+  const call = db.byId('calls', req.params.callId);
   if (!call || ![call.callerId, call.calleeId].includes(req.user.id)) throw new HttpError(404, 'Call not found.');
   return call;
 }
 
 router.post('/bookings/:id/calls', requireAuth, wrap(async (req, res) => {
-  const { b, side, other } = party(req);
+  const { b, side, other } = await party(req);
   requireOpen(b);
   const kind = oneOf(req.body?.kind || 'audio', ['audio', 'video'], 'Call type');
   // Clear calls left ringing or connected for too long (e.g. a closed tab).
@@ -172,13 +172,13 @@ router.post('/bookings/:id/calls', requireAuth, wrap(async (req, res) => {
     if (!live.has(c.id) || Date.now() - Date.parse(c.createdAt) > 4 * 3_600_000) endCall(c, c.status === 'ringing' ? 'missed' : 'completed');
     else throw new HttpError(409, 'There is already a call on this trip.');
   }
-  if (!isOnline(other.id) && !hasDevices(other.id)) {
+  if (!(await isOnlineAnywhere(other.id)) && !hasDevices(other.id)) {
     system(b, `${firstName(req.user.name)} tried to ${kind === 'video' ? 'video call' : 'call'}. ${side === 'passenger' ? 'Your driver' : 'Your passenger'} was offline, so we sent a notification.`);
     notify(other.id, `Missed ${kind === 'video' ? 'video call' : 'call'}`, `${firstName(req.user.name)} tried to reach you about ${b.ref}. Open DROP to reply.`, 'trips');
     throw new HttpError(409, `${side === 'passenger' ? 'Your driver' : 'Your passenger'} is not in the DROP app right now. We’ve let them know. You can send a message${phoneMode() !== 'off' ? ' or phone them' : ''}.`);
   }
   const call = db.insert('calls', { id: id(), bookingId: b.id, kind, callerId: req.user.id, calleeId: other.id, callerName: firstName(req.user.name), status: 'ringing', createdAt: now() });
-  live.set(call.id, { timer: setTimeout(() => { const c = db.find('calls', (x) => x.id === call.id); if (c?.status === 'ringing') endCall(c, 'missed'); }, RING_MS) });
+  live.set(call.id, { timer: setTimeout(() => { const c = db.byId('calls', call.id); if (c?.status === 'ringing') endCall(c, 'missed'); }, RING_MS) });
   emit(other.id, 'call:ring', { callId: call.id, bookingId: b.id, ref: b.ref, kind, from: firstName(req.user.name), fromRole: side });
   // The other person's phone app may be in the background: ring it with a time-sensitive push.
   void pushTo(other.id, { title: `${firstName(req.user.name)} is ${kind === 'video' ? 'video ' : ''}calling`, body: `DROP trip ${b.ref}. Tap to answer.`, data: { type: 'call', callId: call.id, bookingId: b.id, kind, from: firstName(req.user.name) }, priority: 'call', ttl: 40, sound: 'default' });
@@ -230,7 +230,7 @@ router.post('/calls/:callId/signal', requireAuth, wrap(async (req, res) => {
 /* ---------- phone calls on registered numbers ---------- */
 
 router.post('/bookings/:id/phone', requireAuth, wrap(async (req, res) => {
-  const { b, side, other } = party(req);
+  const { b, side, other } = await party(req);
   requireOpen(b);
   const mode = phoneMode();
   if (mode === 'off') throw bad('Phone calls are switched off. Please use an in-app voice call.');
