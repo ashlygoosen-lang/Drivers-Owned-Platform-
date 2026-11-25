@@ -20,6 +20,7 @@ import commsRoutes from './routes/comms.js';
 import trackingRoutes from './routes/tracking.js';
 import accountRoutes from './routes/account.js';
 import planRoutes from './routes/plans.js';
+import travelRoutes from './routes/travel.js';
 import { attestRouter, requireIntegrity } from './attest.js';
 import moneyRoutes, { paystackWebhook } from './routes/money.js';
 import { remoteRouter } from './money/paymentology/remote.js';
@@ -82,7 +83,7 @@ export function createApp() {
   app.post('/api/verification/documents', limiter('uploads', 60, 15));
   app.post('/api/bookings', limiter('bookings', Number(process.env.RATE_LIMIT_BOOKINGS || 20), 60, { message: 'You’ve made a lot of bookings in the last hour. Please wait a little, or contact support.' }));
   app.post(['/api/auth/login', '/api/auth/register', '/api/auth/password/forgot', '/api/drivers/apply', '/api/enquiries', '/api/bookings'], botCheck());
-  app.post(['/api/bookings', '/api/payments/bookings/:id/checkout', '/api/wallet/withdrawals', '/api/plans', '/api/payments/plans/:id/checkout'], idempotent());
+  app.post(['/api/bookings', '/api/payments/bookings/:id/checkout', '/api/wallet/withdrawals', '/api/plans', '/api/payments/plans/:id/checkout', '/api/travel/join', '/api/payments/travel/:id/checkout'], idempotent());
 
   // Mobile apps: genuine-app checks on sign-in, booking, payments and withdrawals (ATTESTATION_MODE).
   app.use(['/api/app/attest'], limiter('attest', 60, 15, { byIp: true }));
@@ -116,7 +117,7 @@ export function createApp() {
   });
   app.get('/api/company', (_req, res) => res.json(COMPANY));
   app.use('/api/auth', authRoutes);
-  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, commsRoutes, trackingRoutes, accountRoutes, moneyRoutes, planRoutes, adminRoutes);
+  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, commsRoutes, trackingRoutes, accountRoutes, moneyRoutes, planRoutes, travelRoutes, adminRoutes);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Universal links (iOS) and App Links (Android): reset-password and trip links open the apps.

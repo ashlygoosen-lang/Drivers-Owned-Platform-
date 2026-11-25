@@ -91,6 +91,13 @@ router.get('/payments/verify/:reference', requireAuth, wrap(async (req, res) => 
   const found = (await db.faultIn('bookings', 'pendingPaymentReference', ref)) || (await db.faultIn('bookings', 'paymentReference', ref));
   const booking = found?.userId === req.user.id ? found : undefined;
   if (!booking) {
+    const gb = db.find('groupBookings', (x) => (x.pendingPaymentReference === ref || (x.payments || []).some((p) => p.reference === ref)) && x.userId === req.user.id);
+    if (gb) {
+      if ((gb.payments || []).some((p) => p.reference === ref)) return res.json({ groupBookingId: gb.id, paid: true });
+      const { markTravelPaid } = await import('../travelService.js');
+      const updated = await markTravelPaid(gb, await paystack.verify(ref));
+      return res.json({ groupBookingId: updated.id, paid: ['paid', 'deposit_paid'].includes(updated.status) });
+    }
     const plan = db.find('plans', (p) => (p.pendingPaymentReference === ref || p.paymentReference === ref) && p.userId === req.user.id);
     if (!plan) throw new HttpError(404, 'Payment not found.');
     if (plan.paymentStatus === 'paid') return res.json({ planId: plan.id, paid: true });
@@ -119,6 +126,8 @@ export function paystackWebhook() {
       else {
         const plan = db.find('plans', (p) => p.pendingPaymentReference === ref || p.paymentReference === ref);
         if (plan) await markPlanPaid(plan, event.data);
+        const gb = !plan && db.find('groupBookings', (x) => x.pendingPaymentReference === ref);
+        if (gb) await (await import('../travelService.js')).markTravelPaid(gb, event.data);
       }
     } catch (err) { console.error('[drop] paystack webhook', err.message); }
   });
