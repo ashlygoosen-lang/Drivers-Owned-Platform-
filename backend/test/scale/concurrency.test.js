@@ -18,7 +18,7 @@ const trip = { service: 'Ride', category: 'Comfort', pickup: 'Gardens', destinat
 before(async () => {
   if (skip) return;
   await query(DB, 'drop table if exists drop_docs, drop_counters cascade; drop sequence if exists drop_seq');
-  cluster = await startCluster({ databaseUrl: DB, redisUrl: REDIS, instances: 2 });
+  cluster = await startCluster({ databaseUrl: DB, redisUrl: REDIS, instances: 2, env: { PAYSTACK_SECRET_KEY: 'sk_test_scale', PAYSTACK_BASE_URL: 'http://127.0.0.1:9' } });
   [A, B] = cluster.instances.map((s) => s.base);
   people = await seed(DB, { drivers: 320, passengers: 60 });
   // drivers[0..299] race in the first test; the other tests use drivers[300+] so earlier winners don't interfere.
@@ -107,4 +107,25 @@ test('cross-server: written on one server, read and pushed live on the other', {
 test('booking refs never collide across servers', { skip }, async () => {
   const rows = await query(DB, "select data->>'ref' r, count(*)::int n from drop_docs where collection='bookings' group by 1 having count(*) > 1");
   assert.deepEqual(rows, []);
+});
+
+test('group travel: 40 travellers on two servers race for a 25-seat bus, no overbooking', { skip }, async () => {
+  const partner = { id: crypto.randomUUID(), name: 'Scale Coaches', type: 'bus', defaultCapacity: 25, active: true, createdAt: new Date().toISOString() };
+  const route = { id: crypto.randomUUID(), partnerId: partner.id, type: 'bus', origin: 'CPT', destination: 'PLZ', originName: 'Cape Town', destinationName: 'Gqeberha', international: false, capacity: 25, minimum: 18, bulkRate: 300, pricePerPerson: 380, deadlineDays: 3, depositPct: 30, failurePolicy: 'refund', cancellationPolicy: { beforeDeadlinePct: 0, afterDeadlinePct: 50, afterTicketedPct: 100 }, active: true, createdAt: new Date().toISOString() };
+  await query(DB, "insert into drop_docs (collection, id, data) values ('partners', $1, $2), ('travelRoutes', $3, $4)", [partner.id, JSON.stringify(partner), route.id, JSON.stringify(route)]);
+  await query(DB, "notify drop_changes, 'seed'");
+  await new Promise((r) => setTimeout(r, 2500));
+  const dep = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const body = (i) => ({ routeId: route.id, departureDate: dep, passengers: [{ fullName: `Scale Traveller ${i}`, dateOfBirth: '1991-02-03', nationality: 'South African' }] });
+  const results = await Promise.all(people.passengers.slice(0, 40).map((p, i) => call(pick(i), 'POST', '/travel/join', { token: p.token, body: body(i) })));
+  assert.ok(results.every((r) => r.status === 201), JSON.stringify([...new Set(results.map((r) => `${r.status} ${r.data.error || ''}`))]));
+  const groups = await query(DB, "select data->>'status' s, (data->>'seatsTaken')::int t, (data->>'sequence')::int q from drop_docs where collection='travelGroups' and data->>'routeId'=$1 order by q", [route.id]);
+  assert.deepEqual(groups.map((g) => [g.s, g.t]), [['FULL', 25], ['OPEN', 15]]);
+  // Bookings go through each server's write queue: wait for the flush, then every one must be there.
+  let n = 0;
+  for (let i = 0; i < 50 && n < 40; i++) {
+    [{ n }] = await query(DB, "select count(*)::int n from drop_docs where collection='groupBookings' and data->>'routeId'=$1", [route.id]);
+    if (n < 40) await new Promise((r) => setTimeout(r, 200));
+  }
+  assert.equal(n, 40);
 });
