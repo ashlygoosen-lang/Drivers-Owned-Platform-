@@ -445,7 +445,7 @@ router.post('/admin/plans/:id/cancel', opsWrite, wrap(async (req, res) => {
   const effective = immediate || p.status === 'awaiting_payment' ? now() : new Date(Math.max(Date.now() + CANCEL_NOTICE_HOURS() * 3_600_000, Date.parse(`${p.startDate}T00:00:00+02:00`))).toISOString();
   const updated = db.update('plans', p.id, { status: 'cancelled', cancelEffective: effective, cancelReason: reason, autoRenew: false, history: addHistory(p, 'cancelled', `Cancelled by ${req.user.name}: ${reason}`) });
   audit(req.user, 'plan.cancelled', p.id, { plan: p.ref, reason, immediate: String(immediate) });
-  notify(p.userId, `${p.ref} cancelled`, `Your plan was cancelled by DROP support (${reason}). Every trip that doesn’t run is refunded when the period closes.`, 'plans');
+  notify(p.userId, `${p.ref} cancelled`, 'DROP support has cancelled this plan as requested. Every trip that doesn’t run is refunded to you when the period closes. Contact support if you didn’t ask for this.', 'plans');
   if (p.driverId) notify(p.driverId, `Plan ${p.ref} cancelled`, 'This plan was cancelled by operations.', 'plans');
   res.json({ plan: planView(updated, req.user) });
 }));
