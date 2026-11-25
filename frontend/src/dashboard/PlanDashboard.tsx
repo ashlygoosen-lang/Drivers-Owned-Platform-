@@ -1,3 +1,5 @@
+import { PlanMap } from './PlanMap';
+import { sideView } from '../lib/vehicleArt';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, money, token, BASE, type Booking } from '../lib/api';
 import { button, outline, ErrorText, Icon, Spinner, StatusPill } from '../components/ui';
@@ -170,7 +172,7 @@ function PlanCard({ plan: p, onOpen }: { plan: PlanWithStats; onOpen: () => void
     <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold uppercase tracking-wide text-[#5b6b82]">{p.ref}</p><h5 className="text-lg font-semibold">{p.school}</h5></div><StatusPill status={PLAN_STATUS[p.status] || p.status} /></div>
     <p className="mt-1 text-sm text-[#536175]">{shortDate(p.startDate)} – {shortDate(p.endDate)} · {days(p.days)} · {p.legs.map((l) => l.time).join(' & ')}</p>
     <div className="mt-4 flex flex-wrap gap-2">{(p.riders || []).map((r) => <span key={r.name} className="rounded-full bg-[#eef2f7] px-3 py-1 text-[13px] font-semibold text-navy">{r.name}{r.grade ? ` · ${r.grade}` : ''}</span>)}</div>
-    <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#f4f6f9] p-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{(p.driver?.name || '?').slice(0, 1)}</span>
+    <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#f4f6f9] p-3"><span className="w-16 shrink-0" aria-hidden dangerouslySetInnerHTML={{ __html: sideView(p.vehicleType || 'sedan', { width: 64 }) }} /><span className="hidden h-9 w-9 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{(p.driver?.name || '?').slice(0, 1)}</span>
       <span className="text-sm"><b className="block">{p.driver?.name || 'Matching a vetted driver'}</b><span className="text-[#536175]">{p.driver ? `${p.driver.vehicle}${p.driver.rating ? ` · ★ ${p.driver.rating}` : ''}` : 'Trips are still covered by nearby vetted drivers'}</span></span></div>
     <div className="mt-4"><div className="flex justify-between text-[12px] text-[#5b6b82]"><span>{p.stats.tripsDriven} of {p.stats.tripsPlanned} trips driven</span><span>{p.stats.onTimeRate == null ? '' : `${p.stats.onTimeRate}% on time`}</span></div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#e6ebf1]"><div className="h-full rounded-full bg-orange" style={{ width: `${pct}%` }} /></div></div>
@@ -213,6 +215,7 @@ function PlanDetail({ plan: p, kind, notify, onBack, onChange, onTrack }: { plan
         <p className="text-sm text-[#536175]">{longDate(p.startDate)} – {longDate(p.endDate)} · {days(p.days)} · {p.category}</p></div>
       <StatusPill status={PLAN_STATUS[p.status] || p.status} />
     </header>
+    <PlanMap planId={p.id} scholar={scholar} onTrack={onTrack} />
     <div className="grid gap-4 lg:grid-cols-3">
       <section className="self-start rounded-2xl border border-[#d2dae4] bg-white p-5 lg:col-span-2">
         <h4 className="mb-3 font-semibold">{new Date(`${p.startDate}T12:00:00+02:00`).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}</h4>

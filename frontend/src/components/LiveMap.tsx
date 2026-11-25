@@ -5,7 +5,7 @@ import { decodePolyline, fmtDist, fmtEta, type LatLng } from '../lib/maps';
 import { MapCanvas, type Line, type Pin } from './MapCanvas';
 import { Icon } from './ui';
 
-interface Fix { lat: number; lng: number; heading: number; speed: number | null; accuracy: number | null; at: string; source?: string; stale?: boolean; name?: string; vehicle?: string }
+interface Fix { lat: number; lng: number; heading: number; speed: number | null; accuracy: number | null; at: string; source?: string; stale?: boolean; name?: string; vehicle?: string; vehicleType?: string }
 interface Eta { durationSec: number; distanceM: number; estimated: boolean }
 export interface Tracking {
   bookingId: string; ref: string; status: string; stage: 'to_pickup' | 'to_destination' | string;
@@ -40,7 +40,7 @@ export function LiveMap({ bookingId, viewer, className = 'h-80' }: { bookingId: 
     if (t.pickup && t.stage !== 'to_destination') out.push({ id: 'pickup', kind: 'pickup', ...t.pickup, label: `Pickup · ${t.pickup.label}` });
     if (t.destination) out.push({ id: 'destination', kind: 'destination', ...t.destination, label: `Destination · ${t.destination.label}` });
     if (t.passenger) out.push({ id: 'passenger', kind: 'passenger', lat: t.passenger.lat, lng: t.passenger.lng, label: 'Passenger’s location' });
-    if (t.driver) out.push({ id: 'car', kind: 'car', lat: t.driver.lat, lng: t.driver.lng, heading: t.driver.heading, muted: t.driver.stale, label: t.driver.vehicle || 'Your DROP car' });
+    if (t.driver) out.push({ id: 'car', kind: 'car', lat: t.driver.lat, lng: t.driver.lng, heading: t.driver.heading, muted: t.driver.stale, vehicle: t.driver.vehicleType, label: t.driver.vehicle || 'Your DROP car' });
     return out;
   }, [t]);
 

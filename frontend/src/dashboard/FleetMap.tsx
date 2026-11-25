@@ -5,7 +5,7 @@ import { LiveMap } from '../components/LiveMap';
 import { StatusPill } from '../components/ui';
 import { Empty, Loading } from './common';
 
-interface FleetDriver { id: string; name: string; vehicle: string; rating: number | null; lat: number; lng: number; heading: number; speed: number | null; at: string; stale: boolean; state: 'available' | 'on_trip'; trip: { id: string; ref: string; status: BookingStatus; pickup: string; destination: string } | null }
+interface FleetDriver { id: string; name: string; vehicle: string; vehicleType?: string; rating: number | null; lat: number; lng: number; heading: number; speed: number | null; at: string; stale: boolean; state: 'available' | 'on_trip'; trip: { id: string; ref: string; status: BookingStatus; pickup: string; destination: string } | null }
 interface Fleet { drivers: FleetDriver[]; requests: { id: string; ref: string; service: string; pickup: string; lat: number; lng: number; createdAt: string }[]; at: string }
 
 const ago = (iso: string) => { const s = Math.round((Date.now() - Date.parse(iso)) / 1000); return s < 60 ? `${s}s ago` : `${Math.round(s / 60)} min ago`; };
@@ -20,7 +20,7 @@ export function FleetMap() {
 
   const pins = useMemo<Pin[]>(() => fleet ? [
     ...fleet.requests.map((r) => ({ id: `r:${r.id}`, kind: 'request' as const, lat: r.lat, lng: r.lng, label: `${r.ref} waiting` })),
-    ...fleet.drivers.map((d) => ({ id: `d:${d.id}`, kind: 'car' as const, lat: d.lat, lng: d.lng, heading: d.heading, muted: d.stale, label: `${d.name} · ${d.state === 'on_trip' ? 'on a trip' : 'available'}`, onClick: () => setSelected(d.id) })),
+    ...fleet.drivers.map((d) => ({ id: `d:${d.id}`, kind: 'car' as const, lat: d.lat, lng: d.lng, heading: d.heading, muted: d.stale, vehicle: d.vehicleType, label: `${d.name} · ${d.state === 'on_trip' ? 'on a trip' : 'available'}`, onClick: () => setSelected(d.id) })),
   ] : [], [fleet]);
 
   if (error) return <p className="text-sm text-red-800">{error}</p>;

@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { topView } from '../lib/vehicleArt';
 import { loadGoogleMaps, mapsConfig, onMapsAuthFailure, mapsAuthFailed, type LatLng, type MapsConfig } from '../lib/maps';
 
-export interface Pin { id: string; kind: 'car' | 'pickup' | 'destination' | 'passenger' | 'request'; lat: number; lng: number; heading?: number; label?: string; muted?: boolean; onClick?: () => void }
+export interface Pin { id: string; kind: 'car' | 'pickup' | 'destination' | 'passenger' | 'request'; lat: number; lng: number; heading?: number; label?: string; muted?: boolean; vehicle?: string; onClick?: () => void }
 export interface Line { id: string; path: LatLng[]; style: 'route' | 'dashed' | 'trail' }
 
-const CAR_SVG = '<svg width="30" height="46" viewBox="-15 -23 30 46" aria-hidden="true"><rect x="-12" y="-20" width="24" height="40" rx="8" fill="#071b3a" stroke="#fff" stroke-width="3"/><rect x="-8" y="-12" width="16" height="7" rx="2" fill="#ff6b00"/><rect x="-8" y="7" width="16" height="5" rx="2" fill="#ff6b00"/></svg>';
+// Each car is drawn as its real vehicle type (hatchback, minibus, bakkie, motorbike…), rotated to its heading.
 
 function pinElement(p: Pin) {
   const el = document.createElement('div');
@@ -13,7 +14,7 @@ function pinElement(p: Pin) {
   el.title = p.label || '';
   el.setAttribute('aria-label', p.label || p.kind);
   if (p.kind === 'car') {
-    el.innerHTML = `<div style="transition:transform .9s linear;transform:rotate(${p.heading || 0}deg);filter:drop-shadow(0 4px 6px #071b3a55)${p.muted ? ';opacity:.45' : ''}">${CAR_SVG}</div>`;
+    el.innerHTML = `<div style="transition:transform .9s linear;transform:rotate(${p.heading || 0}deg);filter:drop-shadow(0 4px 6px #071b3a55)${p.muted ? ';opacity:.45' : ''}">${topView(p.vehicle || 'sedan')}</div>`;
   } else if (p.kind === 'pickup') {
     el.innerHTML = '<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:6px solid #071b3a;box-shadow:0 2px 6px #0004"></div>';
   } else if (p.kind === 'destination') {
@@ -150,7 +151,7 @@ function PlotMap({ pins, lines, className, caption }: { pins: Pin[]; lines: Line
       {proj && pins.map((p) => {
         const [x, y] = proj(p);
         return <g key={p.id} style={{ transform: `translate(${x}px, ${y}px)`, transition: p.kind === 'car' ? 'transform 1s linear' : undefined }} opacity={p.muted ? 0.45 : 1} onClick={p.onClick} className={p.onClick ? 'cursor-pointer' : undefined}>
-          {p.kind === 'car' && <g transform={`rotate(${p.heading || 0})`}><rect x="-11" y="-18" width="22" height="36" rx="7" fill="#071b3a" stroke="#fff" strokeWidth="3" /><rect x="-7" y="-11" width="14" height="6" rx="2" fill="#ff6b00" /><rect x="-7" y="6" width="14" height="4" rx="2" fill="#ff6b00" /></g>}
+          {p.kind === 'car' && <g transform={`rotate(${p.heading || 0})`} dangerouslySetInnerHTML={{ __html: topView(p.vehicle || 'sedan', { size: 40, centered: true }) }} />}
           {p.kind === 'pickup' && <circle r="10" fill="#fff" stroke="#071b3a" strokeWidth="6" />}
           {p.kind === 'destination' && <><circle r="12" fill="#ff6b00" stroke="#fff" strokeWidth="3" /><circle r="4" fill="#071b3a" /></>}
           {p.kind === 'passenger' && <><circle r="16" fill="#1a73e833" /><circle r="8" fill="#1a73e8" stroke="#fff" strokeWidth="3" /></>}

@@ -1,3 +1,4 @@
+import { sideView, CATEGORY_ART } from '../lib/vehicleArt';
 import { useEffect, useState } from 'react';
 import { api, money, STATUS_LABEL, type ApiError, type Booking, type Quote, type Service } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -71,7 +72,7 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
     try {
       const q = await api<Quote>('/fares/estimate', { body: { service, pickup, destination } });
       setQuote(q);
-      setCategory((c) => q.options.some((o) => o.category === c) ? c : q.options[0].category);
+      setCategory((c) => q.options.some((o) => o.category === c) ? c : (q.selected?.category || q.options[0].category)); // the server's default (Comfort for rides)
       setStep('options');
     } catch (err) { setError((err as Error).message); setStep('details'); }
     finally { setBusy(false); }
@@ -152,7 +153,7 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
       {step === 'options' && <div className="grid gap-4">
         {busy && !quote ? <p className="flex items-center gap-3 text-sm"><Spinner /> Calculating your fare…</p> : quote && <>
           <div className="rounded-xl bg-[#e6ecf3] p-4 text-sm leading-7"><p>○ &nbsp; {pickup}</p><p>● &nbsp; {destination}</p><p className="mt-1 text-[12px] text-[#505d71]">{quote.distanceKm} km · about {quote.durationMin} min{quote.approximate && ' · approximate distance, confirmed by your driver'}</p></div>
-          <div className="grid gap-3" role="radiogroup" aria-label="Choose a category">{quote.options.map((o) => <button key={o.category} role="radio" aria-checked={category === o.category} onClick={() => setCategory(o.category)} className={`option-card flex items-center gap-4 rounded-xl border p-4 text-left ${category === o.category ? 'border-forest bg-[#dfe6f0]' : 'border-[#d2dae4] hover:border-[#ff8229]'}`}><Icon name={service === 'Delivery' ? 'box' : 'car'} size={30} /><span className="flex-1 text-sm font-semibold">{o.category}<span className="mt-1 block text-[12px] font-normal text-[#505d71]">{o.description}{o.seats ? ` · up to ${o.seats} seats` : ''}</span></span><b>{money(o.fare)}</b></button>)}</div>
+          <div className="grid gap-3" role="radiogroup" aria-label="Choose a category">{quote.options.map((o) => <button key={o.category} role="radio" aria-checked={category === o.category} onClick={() => setCategory(o.category)} className={`option-card flex items-center gap-4 rounded-xl border p-4 text-left ${category === o.category ? 'border-forest bg-[#dfe6f0]' : 'border-[#d2dae4] hover:border-[#ff8229]'}`}><span className="w-[76px] shrink-0" aria-hidden dangerouslySetInnerHTML={{ __html: sideView(CATEGORY_ART[o.category] || 'sedan', { width: 76 }) }} /><span className="flex-1 text-sm font-semibold">{o.category}<span className="mt-1 block text-[12px] font-normal text-[#505d71]">{o.description}{o.seats ? ` · up to ${o.seats} seats` : ''}</span></span><b>{money(o.fare)}</b></button>)}</div>
           {user?.role === 'business' && <Field label="Traveller name (optional)"><input className={input} value={passengerName} onChange={(e) => setPassengerName(e.target.value)} placeholder="Employee or guest name" /></Field>}
           <Field label="Note for your driver (optional)"><input className={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Gate code, landmark, luggage…" maxLength={300} /></Field>
           <Field label="Payment method" hint={payment === 'Card' ? 'You’ll pay securely with Paystack before we find your driver.' : undefined}><select className={input} value={payment} onChange={(e) => setPayment(e.target.value)}>{cardOn && <option value="Card">Card (pay now, secure checkout)</option>}<option value="Cash">Cash, paid to your driver</option>{user?.role === 'business' && <option value="Business account">Business account (monthly invoice)</option>}</select></Field>
@@ -201,6 +202,6 @@ export function BookingFlow({ draft, existing, onTitle, onNotice, onClose, onVer
     </div>
     {step === 'tracking' && booking
       ? <div className="grid content-start gap-3"><LiveMap bookingId={booking.id} viewer="passenger" className="h-80 md:h-[420px]" /><SharePickupLocation bookingId={booking.id} status={booking.status} /></div>
-      : <div className="min-h-96"><MapView active={!!active} /><p className="mt-2 text-[12px] text-[#586578]">Distances and times are estimates. Your driver confirms the route.</p></div>}
+      : <div className="min-h-96"><MapView active={!!active} vehicle={booking?.driver?.vehicleType || CATEGORY_ART[category] || 'sedan'} /><p className="mt-2 text-[12px] text-[#586578]">Distances and times are estimates. Your driver confirms the route.</p></div>}
   </div>;
 }

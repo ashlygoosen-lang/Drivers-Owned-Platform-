@@ -1,3 +1,4 @@
+import { topView } from '../lib/vehicleArt';
 import { useState } from 'react';
 
 export type IconName = 'arrow' | 'car' | 'box' | 'star' | 'shield' | 'pin' | 'clock' | 'check' | 'people' | 'wallet' | 'menu' | 'close' | 'phone' | 'user' | 'logout' | 'upload' | 'mail' | 'building' | 'file' | 'plus' | 'trash' | 'up' | 'spark' | 'chat' | 'video' | 'call' | 'mic' | 'micOff' | 'camOff' | 'send' | 'hangup' | 'speaker';
@@ -88,7 +89,7 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={`inline-block rounded-full px-3 py-1 text-[12px] font-semibold first-letter:uppercase ${tone}`}>{status.replace(/_/g, ' ')}</span>;
 }
 
-export function MapView({ active = false }: { active?: boolean }) {
+export function MapView({ active = false, vehicle = 'sedan' }: { active?: boolean; vehicle?: string }) {
   const [zoom, setZoom] = useState(1);
   return <div className="relative h-full min-h-72 overflow-hidden rounded-xl bg-[#e6ebf1]">
     <svg className="absolute h-full w-full" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Stylised Cape Town trip map">
@@ -100,7 +101,7 @@ export function MapView({ active = false }: { active?: boolean }) {
         <path className="motion-route" pathLength="1" d="m200 282 25-108 116-14 32-90" fill="none" stroke="#0c2e65" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="200" cy="282" r="10" fill="#fff" stroke="#0c2e65" strokeWidth="5" /><circle cx="373" cy="70" r="10" fill="#0c2e65" stroke="white" strokeWidth="4" />
         <g fill="#616b7a" fontSize="11" fontFamily="sans-serif"><text x="85" y="110">GREEN POINT</text><text x="290" y="310">CAPE TOWN</text><text x="395" y="60">V&amp;A WATERFRONT</text><text x="430" y="345">DISTRICT SIX</text><text x="60" y="355">GARDENS</text></g>
-        <g className="map-car" style={{ transform: `translate(${active ? 257 : 220}px, ${active ? 170 : 210}px) rotate(-12deg)` }}><rect x="-11" y="-17" width="22" height="34" rx="6" fill="#071b3a" stroke="white" strokeWidth="3" /><path d="M-6-8H6M-6 8H6" stroke="#ff8229" strokeWidth="5" /></g>
+        <g className="map-car" style={{ transform: `translate(${active ? 257 : 220}px, ${active ? 170 : 210}px) rotate(-12deg)` }} dangerouslySetInnerHTML={{ __html: topView(vehicle, { size: 42, centered: true }) }} />
       </g>
     </svg>
     <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-2 text-[12px] font-medium shadow-sm"><span className="live-dot mr-2 inline-block h-1.5 w-1.5 rounded-full bg-green-700" />Trip view</span>

@@ -22,7 +22,7 @@ export interface Booking {
   parcel: string; notes: string; passengerName: string; scheduledFor: string | null; payment: string; distanceKm: number; durationMin: number;
   approximate: boolean; fare: number; driverServiceFee: number; driverEarnings: number; status: BookingStatus; paymentStatus?: 'pending' | 'paid' | 'refunded' | 'refund_pending' | 'cash' | 'invoice';
   rating: number | null; feedback: string; createdAt: string; history: { status: BookingStatus; at: string }[];
-  driver: { name: string; phone: string; vehicle: string; rating: number | null } | null;
+  driver: { name: string; phone: string; vehicle: string; vehicleType?: string; rating: number | null } | null;
   passenger?: { name: string; phone: string } | null; comms?: boolean;
 }
 export interface Application {

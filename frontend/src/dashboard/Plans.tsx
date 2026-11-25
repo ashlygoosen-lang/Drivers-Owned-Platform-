@@ -14,7 +14,7 @@ export interface Plan {
   days: number[]; legs: Leg[]; pickup?: string; destination: string; school: string; company: string; riderCount: number; riders?: Rider[];
   pricing: Pricing; payment: string; paymentStatus: string; skipDates: string[]; autoRenew: boolean; refundedAmount: number;
   cancelEffective: string | null; renewedToId: string | null; renewedFromId: string | null;
-  driver: { name: string; vehicle: string; rating: number | null } | null; owner?: { name: string };
+  driver: { name: string; vehicle: string; vehicleType?: string; rating: number | null } | null; owner?: { name: string }; vehicleType?: string;
   guardian?: { relationship?: string; emergencyName?: string; emergencyPhone?: string; handover?: string; consentAt?: string } | null;
   distanceKm?: number | null; clash?: boolean; earnings?: number;
 }
@@ -62,7 +62,7 @@ export function PlanForm({ kind, notify, onDone }: { kind: PlanKind; notify: Not
       onDone();
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
-  const maxRiders = f.category === 'XL' ? 6 : 4;
+  const maxRiders = ({ Comfort: 4, XL: 6, Minibus: 14 } as Record<string, number>)[f.category] || 4;
   return <form className="grid gap-6" onSubmit={submit}>
     <div className="flex items-center justify-between"><h4 className="text-lg font-semibold">New {scholar ? 'scholar transport' : 'staff transport'} plan</h4><button type="button" className={outline} onClick={onDone}>Back</button></div>
     <fieldset className="grid items-start gap-4 sm:grid-cols-2"><legend className="mb-2 font-semibold">Route</legend>
@@ -74,7 +74,7 @@ export function PlanForm({ kind, notify, onDone }: { kind: PlanKind; notify: Not
         {f.twoWay && <input type="time" aria-label={scholar ? 'Afternoon pickup time at school' : 'Return pickup time'} className={input} value={f.returnTime} onChange={(e) => set('returnTime', e.target.value)} />}</div>
       <div className="grid gap-2 text-sm sm:col-span-2">Days<div className="flex flex-wrap gap-2">{DAY_NAMES.map((d, i) => { const on = f.days.includes(i + 1); return <button type="button" key={d} aria-pressed={on} onClick={() => set('days', on ? f.days.filter((x) => x !== i + 1) : [...f.days, i + 1].sort())} className={`min-h-10 rounded-lg border px-3 ${on ? 'border-navy bg-navy text-white' : 'border-[#cbd0d7]'}`}>{d}</button>; })}</div></div>
       <Field label="Start date" hint="The plan runs to the end of that month and can renew monthly."><input type="date" className={input} required min={tomorrow()} value={f.startDate} onChange={(e) => set('startDate', e.target.value)} /></Field>
-      <Field label="Vehicle"><select className={input} value={f.category} onChange={(e) => set('category', e.target.value)}><option value="Comfort">Comfort sedan (up to 4)</option><option value="XL">XL (up to 6)</option></select></Field>
+      <Field label="Vehicle" hint={f.category === 'Minibus' ? 'Toyota Quantum, Hyundai H-1, Nissan Impendulo and similar.' : undefined}><select className={input} value={f.category} onChange={(e) => set('category', e.target.value)}><option value="Comfort">Comfort sedan (up to 4)</option><option value="XL">XL 7-seater (up to 6)</option><option value="Minibus">Minibus (up to 14)</option></select></Field>
     </fieldset>
 
     <fieldset className="grid gap-3"><legend className="mb-2 font-semibold">{scholar ? 'Learners' : 'Staff members'}</legend>
