@@ -19,3 +19,7 @@ export * from './screens/Auth';
 export * from './screens/Verification';
 export * from './screens/Account';
 export * from './lib/travel';
+export * from './lib/vehicleImages';
+export * from './lib/vehicles';
+export * from './components/VehiclePicker';
+export * from './components/PlanMap';

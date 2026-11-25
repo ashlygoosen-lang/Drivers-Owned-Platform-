@@ -32,6 +32,7 @@ function Shell() {
         <Stack.Screen name="reset-password" options={{ title: '' }} />
         <Stack.Screen name="verification" options={{ title: 'Verification' }} />
         <Stack.Screen name="support" options={{ title: 'Support' }} />
+        <Stack.Screen name="vehicle" options={{ title: 'My vehicle' }} />
       </Stack>
       <CallScreen />
     </CallsProvider>

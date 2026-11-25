@@ -67,7 +67,7 @@ export default function Drive() {
         <Button title={`Navigate to ${a.status === 'in_progress' ? 'destination' : 'pickup'}`} icon="navigate" variant="outline" onPress={() => navigate(a.status === 'in_progress' ? a.destination : a.pickup)} />
         {a.status !== 'in_progress' && <Button title="Release trip" variant="ghost" onPress={() => act(`/bookings/${a.id}/cancel`, 'rel')} />}
       </Card>
-      <LiveTripMap bookingId={a.id} viewer="driver" />
+      <LiveTripMap bookingId={a.id} viewer="driver" vehicleType={user?.vehicleProfile?.type} />
       <TripChat bookingId={a.id} />
     </>}
     {!a && user.online && <>

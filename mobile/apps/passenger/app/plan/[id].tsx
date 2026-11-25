@@ -3,7 +3,7 @@ import { Alert, Switch, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   api, space, type, Banner, Button, Card, Chips, ErrorText, H1, H2, Loading, P, Pill, Row, Screen,
-  PLAN_STATUS, STATUS_LABEL, daysLabel, money, planDate, planIsLive, skippableDates, type Plan, type PlanTrip, type BookingStatus,
+  PlanMap, PLAN_STATUS, STATUS_LABEL, daysLabel, money, planDate, planIsLive, skippableDates, type Plan, type PlanTrip, type BookingStatus,
 } from '@drop/shared';
 import { payPlan } from '../../lib/payPlan';
 
@@ -42,6 +42,8 @@ export default function PlanDetail() {
       <Row icon="car" title="Driver" subtitle={p.driver ? `${p.driver.name}${p.driver.vehicle ? ` · ${p.driver.vehicle}` : ''}${p.driver.rating ? ` · ★ ${p.driver.rating}` : ''}` : 'Not confirmed yet. Each trip is offered to the nearest vetted driver until one accepts the month.'} />
       <Row icon="cash" title={money(p.pricing.total)} subtitle={`${p.pricing.trips} trips · ${money(p.pricing.perDay)} a day`} />
     </Card>
+    <View style={{ height: space(3) }} />
+    <PlanMap planId={p.id} scholar={p.kind === 'scholar'} />
     {p.refundedAmount > 0 && <Banner tone="success" text={`${money(p.refundedAmount)} refunded to your card for unused trips.`} />}
     {p.cancelEffective && <Banner tone="warn" text={`Cancelled: no trips after ${new Date(p.cancelEffective).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}. Unused trips are refunded when the period closes.`} />}
     <ErrorText>{error}</ErrorText>

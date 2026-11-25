@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, Switch, Text, View } from 'react-native';
+import { Image, Linking, Pressable, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import {
   api, useAuth, colors, space, type, Banner, Button, Card, Chips, ErrorText, Field, H2, P, Screen, Segmented,
-  DAY_NAMES, GRADES, HANDOVER, RELATIONSHIP, firstOfNextMonth, isTime, money, tomorrowSast, type Plan, type PlanPricing, type PlanRider, API_ORIGIN,
+  DAY_NAMES, GRADES, HANDOVER, RELATIONSHIP, sideArt, CATEGORY_ART, firstOfNextMonth, isTime, money, tomorrowSast, type Plan, type PlanPricing, type PlanRider, API_ORIGIN,
 } from '@drop/shared';
 import { payPlan } from '../../lib/payPlan';
 
@@ -18,14 +18,15 @@ export default function NewPlan() {
   const [returnTime, setReturnTime] = useState(scholar ? '14:30' : '17:00');
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [startDate, setStartDate] = useState(firstOfNextMonth());
-  const [category, setCategory] = useState<'Comfort' | 'XL'>('Comfort');
+  const [category, setCategory] = useState<'Comfort' | 'XL' | 'Minibus'>('Comfort');
   const [riders, setRiders] = useState<PlanRider[]>([{ name: '', grade: scholar ? 'Grade 1' : undefined, notes: '' }]);
   const [g, setG] = useState({ relationship: RELATIONSHIP[0], emergencyName: '', emergencyPhone: '', handover: HANDOVER[0], consent: false });
   const [quote, setQuote] = useState<PlanPricing | null>(null);
   const [quoteError, setQuoteError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const max = category === 'XL' ? 6 : 4;
+  const MAX = { Comfort: 4, XL: 6, Minibus: 14 } as const;
+  const max = MAX[category];
 
   const body = useMemo(() => ({ kind: scholar ? 'scholar' : 'staff', category, pickup, destination, school, outTime, returnTime: twoWay ? returnTime : undefined, days, startDate }),
     [scholar, category, pickup, destination, school, outTime, returnTime, twoWay, days, startDate]);
@@ -62,8 +63,9 @@ export default function NewPlan() {
     <Text style={[type.body, { marginTop: space(2) }]}>Days</Text>
     <Chips label="Days of the week" options={[1, 2, 3, 4, 5, 6, 7]} selected={days} render={(d) => DAY_NAMES[d - 1]} onToggle={(d) => setDays(days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort())} />
     <Field label="Start date (YYYY-MM-DD)" hint={`Runs to the end of that month. Earliest ${tomorrowSast()}.`} value={startDate} onChangeText={setStartDate} keyboardType="numbers-and-punctuation" maxLength={10} />
-    <Segmented label="Vehicle" options={['Comfort', 'XL'] as const as unknown as ('Comfort' | 'XL')[]} value={category} onChange={(v) => { setCategory(v); setRiders(riders.slice(0, v === 'XL' ? 6 : 4)); }} />
-    <P muted>Comfort takes up to 4, XL up to 6.</P>
+    <Segmented label="Vehicle" options={['Comfort', 'XL', 'Minibus'] as ('Comfort' | 'XL' | 'Minibus')[]} value={category} onChange={(v) => { setCategory(v); setRiders(riders.slice(0, MAX[v])); }} />
+    {(() => { const a = sideArt(CATEGORY_ART[category]); return <View style={{ alignItems: 'center' }}><Image source={a.image} style={{ width: 150, height: (150 * a.height) / a.width }} accessibilityIgnoresInvertColors /></View>; })()}
+    <P muted>Comfort sedan takes up to 4, XL 7-seater up to 6, and a minibus (Toyota Quantum, Hyundai H-1 and similar) up to 14.</P>
 
     <H2>{scholar ? 'Learners' : 'Staff members'}</H2>
     {riders.map((r, i) => <Card key={i} tone="soft">

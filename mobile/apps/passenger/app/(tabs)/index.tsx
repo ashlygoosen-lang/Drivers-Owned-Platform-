@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { api, ApiError, Banner, Button, Card, ErrorText, Field, H1, H2, Icon, P, RiskBanner, Screen, Segmented, colors, money, type, useAuth, type Booking, type Quote, type Service } from '@drop/shared';
+import { api, ApiError, Banner, Button, Card, ErrorText, Field, H1, H2, Icon, P, RiskBanner, Screen, Segmented, colors, money, sideArt, CATEGORY_ART, type, useAuth, type Booking, type Quote, type Service } from '@drop/shared';
 
 /** Book a ride, delivery or premium drive: upfront fare, category, payment, confirm. */
 export default function Book() {
@@ -64,7 +64,7 @@ export default function Book() {
       <P muted>{quote.distanceKm} km · about {quote.durationMin} min{quote.approximate ? ' · approximate, confirmed by your driver' : ''}</P>
       {quote.options.map((o) => <Pressable key={o.category} accessibilityRole="radio" accessibilityState={{ checked: category === o.category }} onPress={() => setCategory(o.category)}>
         <Card style={{ borderWidth: 2, borderColor: category === o.category ? colors.orange : 'transparent', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <Icon name={service === 'Delivery' ? 'cube' : 'car-sport'} size={28} />
+          {(() => { const a = sideArt(CATEGORY_ART[o.category]); return <Image source={a.image} style={{ width: 72, height: (72 * a.height) / a.width }} accessibilityIgnoresInvertColors />; })()}
           <View style={{ flex: 1 }}><Text style={[type.body, { fontWeight: '700' }]}>{o.category}</Text><Text style={type.small}>{o.description}{o.seats ? ` · up to ${o.seats}` : ''}</Text></View>
           <Text style={[type.h2, { marginBottom: 0 }]}>{money(o.fare)}</Text>
         </Card>

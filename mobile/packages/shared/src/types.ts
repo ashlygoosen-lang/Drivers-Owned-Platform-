@@ -5,7 +5,7 @@ export type Service = 'Ride' | 'Delivery' | 'Premium Drive';
 export type BookingStatus = 'awaiting_payment' | 'requested' | 'accepted' | 'arriving' | 'in_progress' | 'completed' | 'cancelled';
 export interface User {
   id: string; name: string; email: string; phone: string; role: Role; company?: string;
-  driverStatus?: 'pending' | 'approved' | 'suspended'; online?: boolean; vehicle?: string; rating?: number | null;
+  driverStatus?: 'pending' | 'approved' | 'suspended'; online?: boolean; vehicle?: string; vehicleProfile?: { type: string; make: string; model: string } | null; rating?: number | null;
   savedPlaces?: { home: string; work: string }; paymentPreference?: string; notifications?: string;
   employees?: Employee[]; disabled?: boolean; createdAt: string; verificationStatus?: VerificationStatus; demo?: boolean; mfaEnabled?: boolean;
 }
@@ -17,7 +17,7 @@ export interface Booking {
   parcel: string; notes: string; passengerName: string; scheduledFor: string | null; payment: string; distanceKm: number; durationMin: number;
   approximate: boolean; fare: number; driverServiceFee: number; driverEarnings: number; status: BookingStatus; paymentStatus?: 'pending' | 'paid' | 'refunded' | 'refund_pending' | 'cash' | 'invoice';
   rating: number | null; feedback: string; createdAt: string; history: { status: BookingStatus; at: string }[];
-  driver: { name: string; phone: string; vehicle: string; rating: number | null } | null;
+  driver: { name: string; phone: string; vehicle: string; vehicleType?: string; rating: number | null } | null;
   passenger?: { name: string; phone: string } | null; comms?: boolean;
 }
 export interface Application {
@@ -62,7 +62,7 @@ export interface Thread { messages: ChatMessage[]; calls: TripCall[]; open: bool
 export interface Tracking {
   bookingId: string; ref: string; status: string; stage: string;
   pickup: { lat: number; lng: number; label: string } | null; destination: { lat: number; lng: number; label: string } | null;
-  driver: { lat: number; lng: number; heading: number; speed: number | null; accuracy: number | null; at: string; stale?: boolean; name?: string; vehicle?: string } | null;
+  driver: { lat: number; lng: number; heading: number; speed: number | null; accuracy: number | null; at: string; stale?: boolean; name?: string; vehicle?: string; vehicleType?: string } | null;
   passenger: { lat: number; lng: number; accuracy: number | null; at: string } | null;
   eta: { durationSec: number; distanceM: number; estimated: boolean } | null; route: { polyline: string; version: number } | null; trail: [number, number][];
 }
