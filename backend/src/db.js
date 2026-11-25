@@ -26,8 +26,8 @@ import { DATA_DIR, UPLOAD_DIR } from './config.js';
  *     see every committed write.
  */
 const FILE = path.join(DATA_DIR, 'drop-db.json');
-const COLLECTIONS = ['users', 'bookings', 'applications', 'tickets', 'enquiries', 'verifications', 'ledger', 'cards', 'cardEvents', 'withdrawals', 'payments', 'notifications', 'audit', 'messages', 'calls', 'sessions', 'devices', 'passwordResets', 'attestKeys', 'securityEvents', 'settings', 'plans'];
-const COUNTER_START = { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0, plan: 1000 };
+const COLLECTIONS = ['users', 'bookings', 'applications', 'tickets', 'enquiries', 'verifications', 'ledger', 'cards', 'cardEvents', 'withdrawals', 'payments', 'notifications', 'audit', 'messages', 'calls', 'sessions', 'devices', 'passwordResets', 'attestKeys', 'securityEvents', 'settings', 'plans', 'partners', 'travelRoutes', 'travelGroups', 'groupBookings', 'groupPassengers', 'partnerPayouts', 'travelInterest'];
+const COUNTER_START = { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0, plan: 1000, travelGroup: 1000, groupBooking: 10000 };
 
 /*
  * Hot-data window (Phase 6B-1, PostgreSQL mode only). Each server keeps in memory only what is live
@@ -151,6 +151,12 @@ create index if not exists drop_docs_payref on drop_docs ((data->>'paymentRefere
 create index if not exists drop_docs_pendref on drop_docs ((data->>'pendingPaymentReference')) where collection = 'bookings';
 create index if not exists drop_docs_created on drop_docs (collection, (data->>'createdAt'));
 create index if not exists drop_docs_updated on drop_docs (updated_at);
+-- Group travel: one joinable group per transport type + partner + route + dates (overflow groups get the next sequence).
+create unique index if not exists drop_travel_open_group on drop_docs ((data->>'groupKey'))
+  where collection = 'travelGroups' and not deleted and data->>'status' in ('OPEN','MINIMUM_REACHED');
+create unique index if not exists drop_travel_group_seq on drop_docs ((data->>'groupKey'), (data->>'sequence'))
+  where collection = 'travelGroups' and not deleted;
+create index if not exists drop_docs_group on drop_docs (collection, (data->>'groupId'));
 `;
 
 async function loadPg(url) {
@@ -506,6 +512,32 @@ export const db = {
    * allowed values (e.g. { status: ['requested'] }). Returns the updated record, or null if the
    * condition no longer holds (someone else changed it first). Unique-index violations throw ConflictError.
    */
+  /**
+   * Atomically add `by` to a numeric field, only if the result stays within [0, record[maxField]] and the
+   * record's status is one of `statuses`. Decided by PostgreSQL in one statement, so concurrent requests on
+   * any number of servers can never push it past the limit (e.g. seats on a travel group).
+   * Returns the updated record, or null if it would not fit.
+   */
+  async adjustStrict(collection, recordId, field, by, { maxField, statuses, patch = {} } = {}) {
+    const record = index.get(collection)?.get(recordId);
+    if (!pg) {
+      if (!record || (statuses && !statuses.includes(record.status))) return null;
+      const next = (Number(record[field]) || 0) + by;
+      if (next < 0 || (maxField && next > Number(record[maxField]))) return null;
+      return this.update(collection, recordId, { ...patch, [field]: next });
+    }
+    const params = [collection, recordId, field, by, JSON.stringify({ ...patch, updatedAt: now() })];
+    let cond = `coalesce((data->>$3)::int, 0) + $4 >= 0`;
+    if (maxField) { params.push(maxField); cond += ` and coalesce((data->>$3)::int, 0) + $4 <= (data->>$${params.length})::int`; }
+    if (statuses) { params.push(statuses); cond += ` and data->>'status' = any($${params.length}::text[])`; }
+    const { rows } = await pg.pool.query(`update drop_docs set data = jsonb_set(data, array[$3], to_jsonb(coalesce((data->>$3)::int, 0) + $4)) || $5::jsonb,
+      seq = nextval('drop_seq'), updated_at = now() where collection = $1 and id = $2 and not deleted and ${cond} returning data, seq`, params);
+    if (!rows.length) { await catchUp(); return null; }
+    ownSeq.add(rows[0].seq.toString());
+    applyRow(collection, recordId, rows[0].data, false);
+    void pg.pool.query(`notify drop_changes, '${instanceId}'`).catch(() => undefined);
+    return index.get(collection).get(recordId);
+  },
   async updateStrict(collection, recordId, patch, { when = {}, message = 'This was changed by someone else.' } = {}) {
     const record = index.get(collection)?.get(recordId);
     const holds = (r) => r && Object.entries(when).every(([k, allowed]) => [].concat(allowed).some((v) => (v === null ? r[k] == null : r[k] === v)));
