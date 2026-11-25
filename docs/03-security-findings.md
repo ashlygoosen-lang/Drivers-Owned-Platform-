@@ -12,20 +12,20 @@ Every **Fixed** item has an automated test in `backend/test/security.test.js` (1
 | SEC-004 | High | Credential stuffing: no per-account lockout, breached passwords accepted, timing leak | Fixed (Turnstile built in Phase 4; needs keys) |
 | SEC-005 | High | End-of-life upload library (multer 1.x) with denial-of-service bugs | Fixed |
 | SEC-006 | High | A stolen session can redirect a driver's payouts instantly | Fixed |
-| SEC-014 | High | No backups; the whole database is one file on one volume | Backups built (Phase 4); needs BACKUP_KEY and a bucket. Postgres in Phase 6 |
+| SEC-014 | High | No backups; the whole database is one file on one volume | Fixed in code: encrypted off-site backups (Phase 4) and managed PostgreSQL support (Phase 6). Needs BACKUP_KEY, a bucket and DATABASE_URL |
 | SEC-007 | Medium | User objects leak secret fields (encrypted bank number, later MFA secret) | Fixed |
 | SEC-008 | Medium | SA ID / passport numbers stored in plain text at rest | Fixed (Phase 4) |
-| SEC-009 | Medium | No idempotency on booking creation (a double tap makes two bookings) | Open (Phase 6) |
+| SEC-009 | Medium | No idempotency on booking creation (a double tap makes two bookings) | Fixed (Phase 6) |
 | SEC-011 | Medium | No self-service password reset | Fixed (Phase 5; set RESEND_API_KEY to send the emails) |
 | SEC-012 | Medium | Rate limits are in memory, per instance | Fixed (Phase 4; Redis when REDIS_URL is set) |
 | SEC-013 | Medium | Audit log is not tamper-evident | Fixed (Phase 4) |
 | SEC-016 | Medium | "Direct" phone mode shares real phone numbers during a trip | Needs owner decision |
 | SEC-017 | Medium | Session token in `localStorage`; no refresh-token rotation | Fixed (Phase 4) |
 | SEC-019 | Medium | No security checks in CI (SAST, secrets, dependency, DAST) | Fixed (Phase 4); turn on branch protection to enforce |
-| SEC-021 | Medium | Driver GPS can be spoofed by a modified client | Mitigated (Phase 5): app attestation and plausibility checks on the server; speed/teleport checks still open |
+| SEC-021 | Medium | Driver GPS can be spoofed by a modified client | Fixed (Phases 5 and 7): app attestation, plus server speed/teleport checks with alerts |
 | SEC-022 | Medium | Google Maps browser key must be referrer-restricted | Needs owner action |
 | SEC-024 | Medium | AES-GCM decryption accepted shortened authentication tags (found by the new CI Semgrep gate) | Fixed (Phase 4) |
-| SEC-010 | Low | Sequential booking refs accepted in place of UUIDs | Open |
+| SEC-010 | Low | Sequential booking refs accepted in place of UUIDs | Fixed (Phase 7) |
 | SEC-015 | Low | CSP script sources broader than needed (Google wildcards, `blob:`) | Open |
 | SEC-018 | Low | Sign-up reveals whether an email is registered | Accepted for now |
 | SEC-020 | Low | Staff accounts start with an admin-chosen password | Open |
@@ -191,8 +191,11 @@ ID: SEC-017 (Medium) The JWT lives in localStorage, so an XSS bug could read it 
   keychain).
 ID: SEC-019 (Medium) There is no CI pipeline. Fix: GitHub Actions with tests, npm audit/OSV, gitleaks,
   Semgrep and a ZAP baseline against staging; merges blocked on High findings. Open (Phase 4).
-ID: SEC-021 (Medium) A modified client can post fake GPS fixes. Fix: speed and teleport plausibility
-  checks; Play Integrity / App Attest in the native driver app. Open (Phase 5).
+ID: SEC-021 (Medium) A modified client can post fake GPS fixes. Fix: Play Integrity / App Attest in the
+  native driver app (Phase 5); the server ignores fixes that report or imply more than 250 km/h
+  (GPS_MAX_SPEED_MS), recovers from genuine glitches after two consistent fixes, and raises a high
+  security event after three jumps in 10 minutes (Phase 7). Drivers are not blocked automatically.
+  Test: tracking.test.js. Fixed.
 ID: SEC-022 (Medium) /api/maps/config returns the browser Maps key by design. Owner action: restrict it
   to your domains and the Maps JavaScript API in Google Cloud, and set a daily quota. Needs owner action.
 ID: SEC-024 (Medium) createDecipheriv('aes-256-gcm') was called without authTagLength, so a truncated or crafted
@@ -200,7 +203,8 @@ ID: SEC-024 (Medium) createDecipheriv('aes-256-gcm') was called without authTagL
   Semgrep job on the first CI run. Fix: authTagLength 16 on every GCM cipher and decipher (documents, ID
   numbers, bank numbers, MFA secrets, backups). Test: defence.test.js. Fixed.
 ID: SEC-010 (Low) GET /bookings/:id also accepts the sequential ref. Access checks hold, but it eases
-  enumeration. Fix: accept UUIDs only in the API (refs for display). Open.
+  enumeration. Fix: booking, tracking and comms routes accept the UUID only; refs are for display
+  (no client used refs in URLs). Fixed (Phase 7).
 ID: SEC-015 (Low) CSP allows *.googleusercontent.com, *.ggpht.com and blob: scripts for Google Maps.
   Fix: switch to Google's nonce-based strict CSP. Open.
 ID: SEC-018 (Low) Sign-up says "an account with this email already exists". Accepted for usability;
