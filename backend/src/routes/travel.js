@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireStepUp } from './auth.js';
 import { db, id, now, nextRef } from '../db.js';
 import { requireAuth, requireRole, optionalAuth } from '../auth.js';
 import { str, int, oneOf, wrap, bad, HttpError } from '../validate.js';
@@ -390,7 +391,7 @@ function manifest(g) {
   });
 }
 const MANIFEST_HEAD = ['Group', 'Booking', 'Full name (as on passport)', 'Date of birth', 'Nationality', 'Passport number', 'Passport expiry', 'Minor', 'Email', 'Phone', 'Ticket'];
-router.get('/admin/travel/groups/:id/manifest.csv', ops, (req, res) => {
+router.get('/admin/travel/groups/:id/manifest.csv', ops, requireStepUp, (req, res) => {
   const g = db.byId('travelGroups', req.params.id);
   if (!g) throw new HttpError(404, 'Group not found.');
   audit(req.user, 'travel.manifest_exported', g.id, { group: g.ref, format: 'csv' });
@@ -401,7 +402,7 @@ router.get('/admin/travel/groups/:id/manifest.csv', ops, (req, res) => {
   res.send([MANIFEST_HEAD, ...manifest(g)].map((r) => r.map(esc).join(',')).join('\n'));
 });
 /** Printable manifest (open and print or save as PDF from the browser). */
-router.get('/admin/travel/groups/:id/manifest.html', ops, (req, res) => {
+router.get('/admin/travel/groups/:id/manifest.html', ops, requireStepUp, (req, res) => {
   const g = db.byId('travelGroups', req.params.id);
   if (!g) throw new HttpError(404, 'Group not found.');
   audit(req.user, 'travel.manifest_exported', g.id, { group: g.ref, format: 'print' });
@@ -414,7 +415,7 @@ router.get('/admin/travel/groups/:id/manifest.html', ops, (req, res) => {
 <p><b>Route:</b> ${e(g.originName)} (${e(g.origin)}) → ${e(g.destinationName)} (${e(g.destination)}) · <b>Departure:</b> ${e(g.departureDate)}${g.returnDate ? ` · <b>Return:</b> ${e(g.returnDate)}` : ''} · <b>Passengers:</b> ${rows.length}</p>
 <p>Confidential: contains personal information protected by POPIA. Share only with the partner for this booking.</p>
 <table><thead><tr>${MANIFEST_HEAD.map((h) => `<th>${e(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${e(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>
-<p style="margin-top:16px">Generated ${e(new Date().toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' }))} by DROP, a division of VINK Group (Pty) Ltd.</p><script>window.print()</script></body></html>`);
+<p style="margin-top:16px">Generated ${e(new Date().toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' }))} by DROP, a division of VINK Group (Pty) Ltd.</p></body></html>`);
 });
 
 /** Cancel a group (e.g. partner withdrew). Applies the group's failure policy: refund all, or offer transfers. */

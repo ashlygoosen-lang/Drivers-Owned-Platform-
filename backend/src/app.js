@@ -1,5 +1,7 @@
 import express from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -37,12 +39,16 @@ export function createApp() {
   app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
   app.disable('x-powered-by');
 
+  // SEC-015: strict, nonce-based CSP (Google's recommended policy for the Maps JavaScript API).
+  // Every response gets a fresh nonce; index.html is served with it on its <script> tags, and
+  // 'strict-dynamic' lets those trusted scripts load what they need (Maps, Turnstile, lazy chunks).
+  // 'https:' and 'self' only matter to old browsers that don't understand 'strict-dynamic'.
+  app.use((_req, res, next) => { res.locals.cspNonce = crypto.randomBytes(16).toString('base64'); next(); });
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
-        // Google Maps JavaScript API needs its script, tile, font and worker hosts.
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", 'https://challenges.cloudflare.com', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com', 'https://*.ggpht.com', 'https://*.googleusercontent.com', 'blob:'],
+        scriptSrc: [(_req, res) => `'nonce-${res.locals.cspNonce}'`, "'strict-dynamic'", "'self'", 'https:'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com', 'https://*.googleusercontent.com', 'https://*.ggpht.com'],
@@ -133,13 +139,20 @@ export function createApp() {
 
   // Serve the built React app (single-service deploy) with SPA fallback.
   if (fs.existsSync(FRONTEND_DIST)) {
+    let cached = null;
+    const indexHtml = () => (IS_PROD && cached) || (cached = fs.readFileSync(path.join(FRONTEND_DIST, 'index.html'), 'utf8'));
+    app.get('/index.html', (_req, res) => res.redirect(301, '/'));
     app.use(express.static(FRONTEND_DIST, {
       index: false,
       setHeaders(res, file) {
         res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(file) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
       },
     }));
-    app.get('*', (_req, res) => res.sendFile('index.html', { root: FRONTEND_DIST }));
+    app.get('*', (_req, res) => {
+      // index.html carries this response's CSP nonce, so it is never cached (the hashed assets are).
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('html').send(indexHtml().replace(/<script(?=[\s>])/g, `<script nonce="${res.locals.cspNonce}"`));
+    });
   }
 
   // eslint-disable-next-line no-unused-vars
