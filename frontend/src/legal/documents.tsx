@@ -14,13 +14,13 @@ const contact = <>{LEGAL.supportEmail} · {LEGAL.phone}</>;
 /* =========================================================================================== */
 const terms: LegalDoc = {
   slug: 'terms', title: 'Terms of Service', audience: 'Passengers and business customers',
-  summary: 'The agreement between you and DROP when you book rides, deliveries, premium drives and monthly plans.',
+  summary: 'The agreement between you and DROP when you book rides, deliveries, premium drives, group travel and monthly plans.',
   body: () => <>
     <Box><P>These terms are written in plain language, as the Consumer Protection Act 68 of 2008 (CPA) requires. Clauses that limit our responsibility or place a risk on you are marked <b>Important</b>. Nothing in these terms takes away rights you have under the CPA, the Electronic Communications and Transactions Act 25 of 2002 (ECTA) or any other law.</P></Box>
 
     <S id="who" n="1." title="Who we are and how these terms apply">
       <P>DROP is operated by {who}. “DROP”, “we” and “us” mean that company. “You” means the person or business using DROP to travel, send a delivery or book a monthly plan.</P>
-      <P>By creating an account or booking, you agree to these terms, the <A href="/legal/privacy">Privacy Policy</A>, the <A href="/legal/cancellations-refunds">Cancellation and Refund Policy</A>, the <A href="/legal/fees">Fees and Tariffs</A> and the <A href="/legal/community-guidelines">Community Guidelines</A>. Monthly plans are also governed by the <A href="/legal/scholar-transport">Scholar Transport Terms</A> or the <A href="/legal/staff-transport">Staff Transport Terms</A>. Drivers sign the separate <A href="/legal/driver-agreement">Driver Partner Agreement</A>.</P>
+      <P>By creating an account or booking, you agree to these terms, the <A href="/legal/privacy">Privacy Policy</A>, the <A href="/legal/cancellations-refunds">Cancellation and Refund Policy</A>, the <A href="/legal/fees">Fees and Tariffs</A> and the <A href="/legal/community-guidelines">Community Guidelines</A>. Monthly plans are also governed by the <A href="/legal/scholar-transport">Scholar Transport Terms</A> or the <A href="/legal/staff-transport">Staff Transport Terms</A>. Group flights and coach trips also follow the group travel sections of the <A href="/legal/cancellations-refunds#group">Cancellation and Refund Policy</A> and <A href="/legal/fees#group">Fees and Tariffs</A>; the airline or coach operator provides the transport under its own conditions of carriage. Drivers sign the separate <A href="/legal/driver-agreement">Driver Partner Agreement</A>.</P>
     </S>
 
     <S id="service" n="2." title="What DROP does">
@@ -513,7 +513,7 @@ const refunds: LegalDoc = {
 /* =========================================================================================== */
 const fees: LegalDoc = {
   slug: 'fees', title: 'Fees and Tariffs', audience: 'Everyone',
-  summary: 'What passengers pay, what drivers pay, and how monthly plans are priced.',
+  summary: 'What passengers pay, what drivers pay, and how monthly plans and group travel are priced.',
   body: () => <>
     <S id="passengers" n="1." title="Passengers">
       <P>The fare is calculated as a base amount plus a rate per kilometre and per minute for the route, with a minimum fare per vehicle category, and rounded to the nearest R5. You see the total before you book. <b>Passengers pay no platform commission.</b> There is no surge pricing.</P>

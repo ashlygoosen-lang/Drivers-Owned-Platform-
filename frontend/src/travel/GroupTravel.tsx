@@ -261,6 +261,7 @@ export function MyGroupTravel({ notify }: { notify: Notify }) {
 /* ============ Public page ============ */
 export function GroupTravelPage() {
   const [sel, setSel] = useState<Sel | null>(null);
+  useEffect(() => { document.title = 'Group travel: flights and coaches at group rates · DROP'; }, []);
   const join = (s: Sel) => {
     try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(s)); } catch { /* storage unavailable */ }
     setSel(s);

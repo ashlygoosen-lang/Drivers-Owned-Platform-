@@ -16,7 +16,7 @@ import { useDropMotion, useScrollProgress, useScrollSpy } from './motion/useDrop
 import { BrandPage } from './brand/BrandPage';
 import { CommsProvider } from './lib/comms';
 import { GroupTravelPage } from './travel/GroupTravel';
-import { PrivacyPage, TermsPage, DeleteAccountPage, LegalIndex, LegalDocPage } from './legal/LegalPage';
+import { PrivacyPage, TermsPage, DeleteAccountPage, LegalIndex, LegalDocPage, NotFoundPage } from './legal/LegalPage';
 
 const services = [
   { name: 'Ride' as Service, tag: 'EVERYDAY, ELEVATED', description: 'Your everyday journey. A better way to get there.', icon: 'car' as IconName, image: '/images/drop-hero.webp', alt: 'Professional driver beside a premium SUV in Cape Town', features: ['Instant & scheduled rides', 'Upfront fare estimates', 'Card or cash, paid to your driver'] },
@@ -310,6 +310,7 @@ export default function App() {
   if (/^\/terms\/?$/.test(window.location.pathname)) return <TermsPage />;
   if (/^\/delete-account\/?$/.test(window.location.pathname)) return <DeleteAccountPage />;
   if (/^\/legal\/?$/.test(window.location.pathname)) return <LegalIndex />;
-  { const m = /^\/legal\/([a-z-]+)\/?$/.exec(window.location.pathname); if (m) return <LegalDocPage slug={m[1]} />; }
+  { const m = /^\/legal\/([a-z0-9-]+)\/?$/i.exec(window.location.pathname); if (m) return <LegalDocPage slug={m[1].toLowerCase()} />; }
+  if (!/^\/(index\.html|reset-password\/?)?$/.test(window.location.pathname)) return <NotFoundPage />;
   return <AuthProvider><Page /></AuthProvider>;
 }
