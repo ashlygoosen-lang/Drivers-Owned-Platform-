@@ -19,7 +19,7 @@ DROP started this programme as a single-server website with one Critical and six
 | Mobile | Web only | DROP and DROP Driver (React Native / Expo): booking, payment, live map, chat, calls, push, background GPS, app attestation, certificate pinning |
 | Scale | One server, one JSON file | Many servers, PostgreSQL + Redis, race-safe booking, idempotency keys, reconciler, graceful deploys |
 
-Detail: [01 inventory](01-system-inventory.md) · [02 threat model](02-threat-model.md) · [03 findings](03-security-findings.md) · [04 defence](04-defence-system.md) · [05 mobile](05-mobile-apps.md) · [06 scalability](06-scalability-architecture.md) · [incident response](incident-response.md)
+Detail: [01 inventory](01-system-inventory.md) · [02 threat model](02-threat-model.md) · [03 findings](03-security-findings.md) · [04 defence](04-defence-system.md) · [05 mobile](05-mobile-apps.md) · [06 scalability](06-scalability-architecture.md) · [incident response](incident-response.md) · [07 group travel](07-group-travel.md)
 
 ## 2. How this was verified (Phase 7, 25 Nov 2026)
 
