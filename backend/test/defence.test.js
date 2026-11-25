@@ -40,6 +40,10 @@ test('SEC-008: identity numbers are encrypted at rest (and old records are migra
   assert.equal(legacy.profile.idNumber, undefined);
   assert.ok(legacy.profile.idNumberEnc && legacy.profile.idNumberHash);
   assert.equal(revealIdNumber(legacy.profile), '8001015009087');
+  // SEC-024: a truncated ciphertext (short GCM tag) must be rejected, not accepted with a weak tag
+  const { encryptText, decryptText } = await import('../src/kyc.js');
+  const good = Buffer.from(encryptText('secret'), 'base64');
+  assert.throws(() => decryptText(good.subarray(0, 20).toString('base64')));
 
   const admin = (await call('POST', '/auth/login', { body: { email: 'admin@drop.test', password: 'AdminPass123' } })).data.token;
   const p = await verifiedPassenger(call, admin, 'pat@example.com');

@@ -24,6 +24,7 @@ Every **Fixed** item has an automated test in `backend/test/security.test.js` (1
 | SEC-019 | Medium | No security checks in CI (SAST, secrets, dependency, DAST) | Fixed (Phase 4); turn on branch protection to enforce |
 | SEC-021 | Medium | Driver GPS can be spoofed by a modified client | Open (Phase 5) |
 | SEC-022 | Medium | Google Maps browser key must be referrer-restricted | Needs owner action |
+| SEC-024 | Medium | AES-GCM decryption accepted shortened authentication tags (found by the new CI Semgrep gate) | Fixed (Phase 4) |
 | SEC-010 | Low | Sequential booking refs accepted in place of UUIDs | Open |
 | SEC-015 | Low | CSP script sources broader than needed (Google wildcards, `blob:`) | Open |
 | SEC-018 | Low | Sign-up reveals whether an email is registered | Accepted for now |
@@ -194,6 +195,10 @@ ID: SEC-021 (Medium) A modified client can post fake GPS fixes. Fix: speed and t
   checks; Play Integrity / App Attest in the native driver app. Open (Phase 5).
 ID: SEC-022 (Medium) /api/maps/config returns the browser Maps key by design. Owner action: restrict it
   to your domains and the Maps JavaScript API in Google Cloud, and set a daily quota. Needs owner action.
+ID: SEC-024 (Medium) createDecipheriv('aes-256-gcm') was called without authTagLength, so a truncated or crafted
+  ciphertext with a short tag could pass integrity checks with far less forgery resistance. Found by the
+  Semgrep job on the first CI run. Fix: authTagLength 16 on every GCM cipher and decipher (documents, ID
+  numbers, bank numbers, MFA secrets, backups). Test: defence.test.js. Fixed.
 ID: SEC-010 (Low) GET /bookings/:id also accepts the sequential ref. Access checks hold, but it eases
   enumeration. Fix: accept UUIDs only in the API (refs for display). Open.
 ID: SEC-015 (Low) CSP allows *.googleusercontent.com, *.ggpht.com and blob: scripts for Google Maps.

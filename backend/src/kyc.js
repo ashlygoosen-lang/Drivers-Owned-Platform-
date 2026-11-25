@@ -78,7 +78,7 @@ export function sniff(buffer) {
 
 export function storeEncrypted(buffer) {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', KEY, iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', KEY, iv, { authTagLength: 16 });
   const body = Buffer.concat([cipher.update(buffer), cipher.final()]);
   const name = `${crypto.randomUUID()}.bin`;
   fs.writeFileSync(path.join(KYC_DIR, name), Buffer.concat([iv, cipher.getAuthTag(), body]), { mode: 0o600 });
@@ -88,7 +88,7 @@ export function storeEncrypted(buffer) {
 export function readDecrypted(name) {
   if (!/^[0-9a-f-]{36}\.bin$/.test(name)) throw bad('Invalid file.');
   const raw = fs.readFileSync(path.join(KYC_DIR, name));
-  const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, raw.subarray(0, 12));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, raw.subarray(0, 12), { authTagLength: 16 });
   decipher.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]);
 }
@@ -100,13 +100,13 @@ export function removeFile(name) {
 /** Encrypt short sensitive text (e.g. bank account numbers) for storage. */
 export function encryptText(text) {
   const iv = crypto.randomBytes(12);
-  const c = crypto.createCipheriv('aes-256-gcm', KEY, iv);
+  const c = crypto.createCipheriv('aes-256-gcm', KEY, iv, { authTagLength: 16 });
   const body = Buffer.concat([c.update(String(text), 'utf8'), c.final()]);
   return Buffer.concat([iv, c.getAuthTag(), body]).toString('base64');
 }
 export function decryptText(b64) {
   const raw = Buffer.from(String(b64 || ''), 'base64');
-  const d = crypto.createDecipheriv('aes-256-gcm', KEY, raw.subarray(0, 12));
+  const d = crypto.createDecipheriv('aes-256-gcm', KEY, raw.subarray(0, 12), { authTagLength: 16 });
   d.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8');
 }

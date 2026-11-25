@@ -23,14 +23,14 @@ const keyFrom = (k) => crypto.createHash('sha256').update(`drop-backup:${k}`).di
 
 export function encryptBackup(plain, key) {
   const iv = crypto.randomBytes(12);
-  const c = crypto.createCipheriv('aes-256-gcm', keyFrom(key), iv);
+  const c = crypto.createCipheriv('aes-256-gcm', keyFrom(key), iv, { authTagLength: 16 });
   const body = Buffer.concat([c.update(plain), c.final()]);
   return Buffer.concat([MAGIC, iv, c.getAuthTag(), body]);
 }
 export function decryptBackup(buf, key) {
   if (!buf.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error('Not a DROP backup file.');
   const o = MAGIC.length;
-  const d = crypto.createDecipheriv('aes-256-gcm', keyFrom(key), buf.subarray(o, o + 12));
+  const d = crypto.createDecipheriv('aes-256-gcm', keyFrom(key), buf.subarray(o, o + 12), { authTagLength: 16 });
   d.setAuthTag(buf.subarray(o + 12, o + 28));
   return Buffer.concat([d.update(buf.subarray(o + 28)), d.final()]);
 }
