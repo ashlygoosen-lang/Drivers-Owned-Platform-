@@ -10,7 +10,7 @@ DROP started this programme as a single-server website with one Critical and six
 
 | Area | Before | Now |
 |---|---|---|
-| Security findings | 24 found: 1 Critical, 6 High, 12 Medium, 5 Low | Critical and High: **all fixed**. Medium: 10 fixed, 2 waiting on you. Low: 1 fixed, 1 partly, 2 open, 1 accepted |
+| Security findings | 24 found: 1 Critical, 6 High, 12 Medium, 5 Low | Critical and High: **all fixed**. Medium: 10 fixed, 2 waiting on you. Low: 4 fixed, 1 accepted |
 | Staff accounts | Demo staff logins could see real customers; no MFA | Demo data isolated; MFA compulsory for all staff; lockouts; breached-password check |
 | Sessions | 7-day tokens that survived logout | 15-minute tokens, rotating refresh cookie with theft detection, sign out everywhere |
 | Sensitive data | ID numbers in plain text; no backups | ID, bank and MFA secrets encrypted; encrypted off-site backups; tamper-evident audit log |
@@ -100,6 +100,6 @@ Prices are estimates from the providers' published plans and change; check them 
 ## 6. Recommended next work
 
 1. **Done 25 Nov:** Phase 6B-1 (hot-data window) and 6B-2 (proximity dispatch). Next: confirm them on staging with the k6 soak test.
-2. **Low findings:** SEC-015, SEC-020 and SEC-023, about a day together.
+2. **Done 25 Nov:** the last Low findings (SEC-015 strict CSP, SEC-020 staff invitations, SEC-023 step-up for sensitive exports).
 3. **Push instead of polling** in the apps, an outbox for emails and payments, and circuit breakers on external providers (06 §5).
 4. **After launch:** a quarterly re-run of this review (findings register, threat model, dependency audit) and a yearly external penetration test.

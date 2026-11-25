@@ -26,10 +26,10 @@ Every **Fixed** item has an automated test in `backend/test/security.test.js` (1
 | SEC-022 | Medium | Google Maps browser key must be referrer-restricted | Needs owner action |
 | SEC-024 | Medium | AES-GCM decryption accepted shortened authentication tags (found by the new CI Semgrep gate) | Fixed (Phase 4) |
 | SEC-010 | Low | Sequential booking refs accepted in place of UUIDs | Fixed (Phase 7) |
-| SEC-015 | Low | CSP script sources broader than needed (Google wildcards, `blob:`) | Open |
+| SEC-015 | Low | CSP script sources broader than needed (Google wildcards, `blob:`) | Fixed (25 Nov) |
 | SEC-018 | Low | Sign-up reveals whether an email is registered | Accepted for now |
-| SEC-020 | Low | Staff accounts start with an admin-chosen password | Open |
-| SEC-023 | Low | Withdrawals CSV holds decrypted bank numbers, with no step-up check at export time | Partly mitigated |
+| SEC-020 | Low | Staff accounts start with an admin-chosen password | Fixed (25 Nov) |
+| SEC-023 | Low | Withdrawals CSV holds decrypted bank numbers, with no step-up check at export time | Fixed (25 Nov) |
 
 ---
 
@@ -206,13 +206,21 @@ ID: SEC-010 (Low) GET /bookings/:id also accepts the sequential ref. Access chec
   enumeration. Fix: booking, tracking and comms routes accept the UUID only; refs are for display
   (no client used refs in URLs). Fixed (Phase 7).
 ID: SEC-015 (Low) CSP allows *.googleusercontent.com, *.ggpht.com and blob: scripts for Google Maps.
-  Fix: switch to Google's nonce-based strict CSP. Open.
+  Fix: nonce-based strict CSP (Google's recommended policy for Maps): a fresh nonce per response,
+  index.html served with it, script-src 'nonce-…' 'strict-dynamic' (https: and 'self' only as a fallback
+  for old browsers). Google wildcards and blob: removed from script-src. Verified in a browser: every
+  page loads with no violations and the Maps loader and its follow-up scripts run. Fixed.
 ID: SEC-018 (Low) Sign-up says "an account with this email already exists". Accepted for usability;
   lockout and Turnstile reduce the value of enumerating. Accepted.
 ID: SEC-020 (Low) Staff accounts start with a password the admin chose. Fix: invite link and set-your-own
-  password on first sign-in. Open.
+  password on first sign-in. Fix: staff are created with no usable password and receive a single-use
+  invitation link (72 hours, hashed, only the newest works); they choose their own password, then set up
+  MFA. Any password the admin sends is ignored. Test: api.test.js. Fixed.
 ID: SEC-023 (Low) The finance payout CSV contains decrypted account numbers (needed by the bank). Now behind
-  staff MFA and audited; add a step-up code prompt on export. Partly mitigated.
+  staff MFA and audited; add a step-up code prompt on export. Fix: POST /auth/step-up with a fresh
+  authenticator (or recovery) code unlocks sensitive exports for 5 minutes; the payout CSV and the group
+  travel passenger manifest (decrypted passports) require it, and each step-up is audited. Test:
+  security.test.js. Fixed.
 ```
 
 ## Checks that passed (no finding)

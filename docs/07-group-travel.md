@@ -86,7 +86,7 @@ Verified by `travel.test.js` (8 people racing for 5 seats → 5 + 3 in an overfl
 ## 7. Personal information (POPIA)
 
 - **Passport numbers are encrypted** (AES-256-GCM) before they are stored. Customers only ever see the last four digits.
-- **They are decrypted in one place only:** the passenger manifest (CSV or printable page), available to **admin and support**. Every export is written to the tamper-evident audit log (`travel.manifest_exported`) and the files are sent with `Cache-Control: no-store`. Share a manifest only with the partner for that group.
+- **They are decrypted in one place only:** the passenger manifest (CSV or printable page), available to **admin and support**, who must enter a fresh authenticator code first (valid 5 minutes). Every export is written to the tamper-evident audit log (`travel.manifest_exported`) and the files are sent with `Cache-Control: no-store`. Share a manifest only with the partner for that group.
 - **Travellers under 18** need the name, relationship and consent of a parent or guardian (POPIA s 35), recorded with the time of consent.
 - Staff roles: **admin** changes everything; **support** can view, export manifests, add tickets and cancel bookings; **finance** can view.
 - Audited staff actions: partner and route changes, group created, confirmed, cancelled, partner paid, tickets added, bookings cancelled, manifests exported.
