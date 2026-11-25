@@ -75,12 +75,19 @@ export function refreshSession() {
 
 const BOT_CHECKED = /^\/(auth\/(login|register)|drivers\/apply|enquiries|bookings)$/;
 
-export async function api<T>(path: string, options: { method?: string; body?: unknown; form?: FormData } = {}, retried = false): Promise<T> {
+/** Requests that create trips or move money carry one key per user action (reused on retry), so they run once. */
+const IDEMPOTENT = /^\/(bookings|payments\/bookings\/[^/]+\/checkout|wallet\/withdrawals)$/;
+
+export async function api<T>(path: string, options: { method?: string; body?: unknown; form?: FormData; idempotencyKey?: string } = {}, retried = false): Promise<T> {
   const headers: Record<string, string> = {};
   const t = token.get();
   if (t) headers.authorization = `Bearer ${t}`;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const method = options.method || (options.body || options.form ? 'POST' : 'GET');
+  if (method === 'POST' && IDEMPOTENT.test(path)) {
+    options = { ...options, idempotencyKey: options.idempotencyKey || crypto.randomUUID() };
+    headers['idempotency-key'] = options.idempotencyKey!;
+  }
   let body = options.body;
   if (method === 'POST' && BOT_CHECKED.test(path) && body && typeof body === 'object') {
     const key = await turnstileSiteKey(BASE);

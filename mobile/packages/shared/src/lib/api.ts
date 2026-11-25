@@ -53,12 +53,21 @@ export function refresh() {
   return refreshing;
 }
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown; form?: FormData } = {}, retried = false): Promise<T> {
+/** Requests that create money or trips: each user action gets one key, reused on retries, so the server runs it once. */
+const IDEMPOTENT = /^\/(bookings|payments\/bookings\/[^/]+\/checkout|wallet\/withdrawals)$/;
+function newKey() {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+export async function api<T>(path: string, init: { method?: string; body?: unknown; form?: FormData; idempotencyKey?: string } = {}, retried = false): Promise<T> {
   const headers: Record<string, string> = {};
   if (!access && !path.startsWith('/auth/') && !path.startsWith('/app/')) await refresh(); // e.g. cold start or background task
   if (access) headers.authorization = `Bearer ${access}`;
   const method = init.method || (init.body !== undefined || init.form ? 'POST' : 'GET');
   if (method !== 'GET' && SENSITIVE.test(path)) Object.assign(headers, await integrityHeaders(raw));
+  if (method === 'POST' && IDEMPOTENT.test(path)) { init = { ...init, idempotencyKey: init.idempotencyKey || newKey() }; headers['idempotency-key'] = init.idempotencyKey!; }
   try {
     return await raw<T>(path, { ...init, method, headers });
   } catch (err) {

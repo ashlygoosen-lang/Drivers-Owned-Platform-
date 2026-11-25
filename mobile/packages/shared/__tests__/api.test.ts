@@ -71,6 +71,26 @@ test('sensitive requests carry a Play Integrity proof bound to a fresh server ch
   expect(calls.some((c) => c.url.endsWith('/app/attest/challenge'))).toBe(false);
 });
 
+test('booking requests carry one idempotency key, reused when the token is refreshed and retried', async () => {
+  await startSession({ token: 'expired', refreshToken: 'r' });
+  let first = true;
+  responder = (c) => {
+    if (c.url.endsWith('/app/attest/challenge')) return { status: 200, body: { challenge: 'ch' } };
+    if (c.url.endsWith('/auth/refresh')) return { status: 200, body: { token: 'fresh', refreshToken: 'r2' } };
+    if (c.url.endsWith('/bookings') && first) { first = false; return { status: 401, body: {} }; }
+    return { status: 201, body: { booking: { id: 'b1' } } };
+  };
+  calls.length = 0;
+  await api('/bookings', { body: { service: 'Ride' } });
+  const keys = calls.filter((c) => c.url.endsWith('/bookings')).map((c) => headers(c)['idempotency-key']);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBeTruthy();
+  expect(keys[1]).toBe(keys[0]);
+  calls.length = 0;
+  await api('/bookings'); // listing trips is a read
+  expect(headers(calls.find((c) => c.url.endsWith('/bookings'))!)['idempotency-key']).toBeUndefined();
+});
+
 test('sign-out revokes the session on the server and clears secure storage', async () => {
   await startSession({ token: 'a', refreshToken: 'r9' });
   responder = () => ({ status: 200, body: { ok: true } });
