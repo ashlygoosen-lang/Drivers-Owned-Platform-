@@ -113,7 +113,7 @@ Legend: **Auth**: — = public, opt = optional, ✓ = signed in. Every booking, 
 | GET /api/verification/documents/:docId/file | ✓ | owner or staff | — | decrypts and streams the file |
 | POST /api/verification/submit | ✓ | own | consent | verifications, notifications |
 | GET /api/notifications · POST /api/notifications/read | ✓ | own | ids | notifications |
-| GET /api/compliance/queue | ✓ | admin, compliance, support, finance | status filter | verifications, users |
+| GET /api/compliance/queue | ✓ | admin, compliance | status filter | verifications, users |
 | GET /api/compliance/verifications/:userId | ✓ | staff | — | full KYC file incl. **unmasked ID**, audit |
 | POST /api/compliance/documents/:docId/review | ✓ | staff | decision, reason | verifications, audit |
 | POST /api/compliance/verifications/:userId/decision | ✓ | staff | decision, note | verifications, users, audit |
@@ -160,7 +160,7 @@ Legend: **Auth**: — = public, opt = optional, ✓ = signed in. Every booking, 
 | Passenger | Register, complete KYC, book and pay, cancel, rate, chat and call their driver, share location, track the car, open support tickets |
 | Business | Same as passenger, plus employees, booking for travellers, monthly invoice payment |
 | Driver | Apply, complete KYC, go online, share GPS, accept and advance trips, chat and call, wallet, bank account, withdrawals, DROP card |
-| Support (staff) | Tickets, enquiries, user and booking lookup, live fleet map, read trip chats (audited), KYC queue view |
+| Support (staff) | Tickets, enquiries, user and booking lookup, live fleet map, read trip chats (audited) |
 | Compliance (staff) | KYC queue, document review, approve/reject, expiring documents, reminders, audit log |
 | Finance (staff) | Ledger, payouts (CSV with bank details), card controls, reconciliation |
 | Admin (super-admin) | Everything above, plus staff accounts, user suspension, role changes, driver applications |
@@ -242,7 +242,11 @@ These are recorded so nothing is lost; each will be confirmed, rated and fixed i
 - **Demo mode:** it is **on by default**. It must be off in production, which is a launch checklist item.
 - **No idempotency keys** on booking creation (a double tap can create two bookings), no audit-log immutability, no backups, no CI pipeline, and no monitoring or error tracking.
 
-## 10. Decisions needed from you before Phase 2–3
+## 10. Decisions (answered 25 Nov 2026)
+
+Peak target: **50,000 concurrent users / 2,000 bookings per minute**. Mobile: **React Native (Expo), two apps** (DROP Passenger and DROP Driver). Budget: **paid managed services approved, start small**. Staging: **approved**.
+
+### Original questions
 
 1. **Scale targets:** concurrent users (X) and bookings per minute at peak (Y), for example 50,000 concurrent and 2,000 bookings/min.
 2. **Mobile stack:** React Native (Expo) is recommended because it shares TypeScript and types with the website. Flutter is the alternative. One passenger app plus one driver app, or a single app with both modes?
