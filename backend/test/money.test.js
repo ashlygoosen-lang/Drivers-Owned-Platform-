@@ -131,7 +131,7 @@ test('passenger card payment → pool, trip completes → driver wallet, card sp
 
   // 5. Withdrawal to bank → finance pays → pool reduced
   assert.equal((await call('POST', '/wallet/withdrawals', { token: d.token, body: { amount: 60 } })).status, 400, 'bank account needed');
-  await call('PUT', '/wallet/bank-account', { token: d.token, body: { holder: 'Dee Driver', bank: 'FNB', branchCode: '250655', accountNumber: '62000012345', accountType: 'Cheque' } });
+  await call('PUT', '/wallet/bank-account', { token: d.token, body: { holder: 'Dee Driver', bank: 'FNB', branchCode: '250655', accountNumber: '62000012345', accountType: 'Cheque', currentPassword: 'Driver123' } });
   w = (await call('GET', '/wallet', { token: d.token })).data;
   assert.equal(w.bankAccount.masked, '•••• 2345');
   assert.ok(!JSON.stringify(db.find('users', (u) => u.id === d.id)).includes('62000012345'), 'account number encrypted at rest');
