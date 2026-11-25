@@ -4,6 +4,10 @@ import QRCode from 'qrcode';
 import { hashPassword, checkPassword, signToken, signStepToken, readStepToken, endAllSessions, publicUser, requireAuth, STAFF_ROLES } from '../auth.js';
 import { loginLocked, loginFailed, loginSucceeded, passwordBreachCount, newTotpSecret, verifyTotp, otpauthUrl, recoveryCodes, hashCode } from '../security.js';
 import { encryptText, decryptText, audit } from '../kyc.js';
+import { issueSession, refresh, endSession } from '../sessions.js';
+import { securityEvent, countOnly } from '../monitor.js';
+import crypto from 'node:crypto';
+const hashIp = (ip) => crypto.createHash('sha256').update(`drop-ip:${ip || ''}`).digest('hex').slice(0, 12);
 import { str, email, phone, password, oneOf, wrap, bad, HttpError } from '../validate.js';
 import { demoEnabled, DEMO_ACCOUNTS, isDemoUser, seedDemoTrip, demoRoleAllowed } from '../demo.js';
 
@@ -52,7 +56,7 @@ router.post('/register', wrap(async (req, res) => {
     role,
     company: role === 'business' ? str(req.body.company, 'Company name', { min: 2, max: 120 }) : '',
   });
-  res.status(201).json({ token: signToken(user), user: publicUser(user) });
+  res.status(201).json({ ...issueSession(req, res, user), user: publicUser(user) });
 }));
 
 router.post('/login', wrap(async (req, res) => {
@@ -60,22 +64,49 @@ router.post('/login', wrap(async (req, res) => {
   const pw = typeof req.body.password === 'string' ? req.body.password : '';
   if (!pw) throw bad('Password is required.');
   const key = `login:${emailAddress}`;
-  const locked = loginLocked(key);
+  const locked = await loginLocked(key);
   if (locked) throw new HttpError(429, `Too many sign-in attempts. Please try again in ${locked} minute${locked > 1 ? 's' : ''}.`);
   const user = db.find('users', (u) => u.email === emailAddress);
   if (user && isDemoUser(user)) throw new HttpError(401, 'Demo accounts open with the demo buttons, not a password.');
   const ok = await checkPassword(pw, user?.passwordHash || DUMMY_HASH);
   if (!user || !ok) {
-    loginFailed(key);
+    countOnly('login_failed');
+    if (await loginFailed(key)) securityEvent('account_locked', { account: user ? user.id : 'unknown-email', ip: hashIp(req.ip) }, user && STAFF_ROLES.includes(user.role) ? 'high' : 'medium');
     throw new HttpError(401, 'That email and password combination is not recognised.');
   }
   if (user.disabled) throw new HttpError(403, 'This account has been suspended. Please contact support.');
-  loginSucceeded(key);
+  await loginSucceeded(key);
+  if (STAFF_ROLES.includes(user.role) && !isDemoUser(user)) {
+    const ipKey = hashIp(req.ip);
+    securityEvent('staff_sign_in', { user: user.id, role: user.role, ip: ipKey, newLocation: String(Boolean(user.lastLoginIp && user.lastLoginIp !== ipKey)) }, user.role === 'admin' && user.lastLoginIp && user.lastLoginIp !== ipKey ? 'high' : 'info');
+    db.update('users', user.id, { lastLoginIp: ipKey });
+  }
   // Second step: required for staff, optional (if switched on) for everyone else.
   if (user.mfa?.enabledAt) return res.json({ mfa: 'verify', mfaToken: signStepToken(user, 'mfa') });
   if (staffMfaRequired(user)) return res.json({ mfa: 'setup', mfaToken: signStepToken(user, 'mfa') });
   db.update('users', user.id, { lastLoginAt: now() });
-  res.json({ token: signToken(user), user: publicUser(user) });
+  res.json({ ...issueSession(req, res, user), user: publicUser(user) });
+}));
+
+/* ---------- Session refresh and sign-out ---------- */
+
+// The custom header can't be sent cross-site without CORS approval, so this also blocks CSRF.
+const csrf = (req) => { if (req.get('x-drop-csrf') !== '1' && String(req.get('x-drop-client') || '').toLowerCase() !== 'mobile') throw new HttpError(403, 'Missing request header.'); };
+
+router.post('/refresh', wrap(async (req, res) => {
+  csrf(req);
+  const r = refresh(req, res);
+  if (r.error) {
+    if (r.error === 'reuse') securityEvent('refresh_token_reuse', { ip: req.ip }, 'high');
+    throw new HttpError(401, 'Please sign in again.');
+  }
+  res.json({ ...r.json, user: publicUser(r.user) });
+}));
+
+router.post('/logout', wrap(async (req, res) => {
+  csrf(req);
+  endSession(req, res);
+  res.json({ ok: true });
 }));
 
 /* ---------- Two-step sign-in (authenticator app) ---------- */
@@ -92,23 +123,23 @@ function mfaSubject(req) {
   return null;
 }
 
-function checkCode(user, { code, recoveryCode }) {
+async function checkCode(user, { code, recoveryCode }) {
   const key = `mfa:${user.id}`;
-  const locked = loginLocked(key);
+  const locked = await loginLocked(key);
   if (locked) throw new HttpError(429, `Too many incorrect codes. Please try again in ${locked} minute${locked > 1 ? 's' : ''}.`);
   if (recoveryCode) {
     const h = hashCode(recoveryCode);
     const codes = user.mfa?.recovery || [];
-    if (!codes.includes(h)) { loginFailed(key); throw bad('That recovery code is not valid.'); }
+    if (!codes.includes(h)) { countOnly('mfa_failed'); await loginFailed(key); throw bad('That recovery code is not valid.'); }
     db.update('users', user.id, { mfa: { ...user.mfa, recovery: codes.filter((c) => c !== h) } });
-    loginSucceeded(key);
+    await loginSucceeded(key);
     return 'recovery';
   }
   const secret = user.mfa?.secretEnc ? decryptText(user.mfa.secretEnc) : null;
   const step = secret && verifyTotp(secret, code, user.mfa.lastStep ?? -1);
-  if (step == null) { loginFailed(key); throw bad('That code is not correct. Check the time on your phone and try the newest code.'); }
+  if (step == null) { countOnly('mfa_failed'); await loginFailed(key); throw bad('That code is not correct. Check the time on your phone and try the newest code.'); }
   db.update('users', user.id, { mfa: { ...user.mfa, lastStep: step } });
-  loginSucceeded(key);
+  await loginSucceeded(key);
   return 'totp';
 }
 
@@ -146,7 +177,7 @@ router.post('/mfa/confirm', wrap(async (req, res, next) => {
   if (!s) return next();
   const codes = await finishSetup(s.user, req.body?.code);
   const fresh = db.update('users', s.user.id, { lastLoginAt: now() });
-  res.json({ recoveryCodes: codes, token: signToken(fresh), user: publicUser(fresh) });
+  res.json({ recoveryCodes: codes, ...issueSession(req, res, fresh), user: publicUser(fresh) });
 }), requireAuth, wrap(async (req, res) => {
   const codes = await finishSetup(req.user, req.body?.code);
   res.json({ recoveryCodes: codes, user: publicUser(db.find('users', (u) => u.id === req.user.id)) });
@@ -156,17 +187,17 @@ router.post('/mfa/verify', wrap(async (req, res) => {
   const user = readStepToken(req.body?.mfaToken, 'mfa');
   if (!user) throw new HttpError(401, 'Your sign-in step has expired. Please sign in again.');
   if (!user.mfa?.enabledAt) throw bad('Two-step sign-in is not set up yet.');
-  const how = checkCode(user, req.body || {});
+  const how = await checkCode(user, req.body || {});
   const fresh = db.update('users', user.id, { lastLoginAt: now() });
   if (how === 'recovery') audit(fresh, 'mfa_recovery_code_used', user.id, { left: String(fresh.mfa.recovery.length) });
-  res.json({ token: signToken(fresh), user: publicUser(fresh), recoveryCodesLeft: fresh.mfa.recovery.length });
+  res.json({ ...issueSession(req, res, fresh), user: publicUser(fresh), recoveryCodesLeft: fresh.mfa.recovery.length });
 }));
 
 router.post('/mfa/disable', requireAuth, wrap(async (req, res) => {
   if (staffMfaRequired(req.user)) throw new HttpError(403, 'Two-step sign-in is required for DROP staff accounts.');
   if (!req.user.mfa?.enabledAt) throw bad('Two-step sign-in is not on.');
   if (!(await checkPassword(String(req.body?.password || ''), req.user.passwordHash))) throw bad('Your password is incorrect.');
-  checkCode(req.user, req.body || {});
+  await checkCode(req.user, req.body || {});
   db.update('users', req.user.id, { mfa: null });
   audit(req.user, 'mfa_disabled', req.user.id, {});
   res.json({ user: publicUser(db.find('users', (u) => u.id === req.user.id)) });
@@ -192,7 +223,7 @@ router.post('/demo', wrap(async (req, res) => {
   const user = db.find('users', (u) => u.email === acc.email);
   if (!user) throw new HttpError(503, 'Demo accounts are still being prepared. Try again in a moment.');
   db.update('users', user.id, { lastLoginAt: now() });
-  res.json({ token: signToken(user), user: publicUser(user) });
+  res.json({ ...issueSession(req, res, user), user: publicUser(user) });
 }));
 
 router.get('/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
@@ -220,7 +251,7 @@ router.patch('/me', requireAuth, wrap(async (req, res) => {
     patch.tokenVersion = (req.user.tokenVersion || 0) + 1; // a new password signs out every other device
   }
   const user = db.update('users', req.user.id, patch);
-  res.json({ user: publicUser(user), ...(patch.passwordHash && { token: signToken(user) }) });
+  res.json({ user: publicUser(user), ...(patch.passwordHash && issueSession(req, res, user)) });
 }));
 
 export default router;

@@ -1,6 +1,7 @@
 /** DROP API client. Same-origin by default; set VITE_API_URL when the API runs on another host. */
 export const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 const KEY = 'drop.token';
+import { turnstileSiteKey, turnstileToken } from './turnstile';
 
 export type Role = 'passenger' | 'driver' | 'business' | 'admin' | 'compliance' | 'support' | 'finance';
 export const STAFF_ROLES: Role[] = ['admin', 'compliance', 'support', 'finance'];
@@ -50,25 +51,55 @@ export interface Notice { id: string; title: string; body: string; link: string;
 export interface AuditEntry { id: string; actorName: string; actorRole: string; action: string; subjectId: string; subjectName: string; detail: Record<string, string>; at: string }
 export const VERIFICATION_LABEL: Record<VerificationStatus, string> = { not_started: 'Not started', in_progress: 'In progress', submitted: 'Under review', action_required: 'Action required', verified: 'Verified' };
 
+/**
+ * The access token lives only in memory (SEC-017): page scripts can't find it in storage, and it
+ * expires after 15 minutes. The httpOnly refresh cookie renews it silently, including after a reload.
+ */
+let accessToken: string | null = null;
+try { localStorage.removeItem(KEY); } catch { /* tokens from older versions */ }
 export const token = {
-  get(): string | null { try { return localStorage.getItem(KEY); } catch { return null; } },
-  set(value: string | null) { try { value ? localStorage.setItem(KEY, value) : localStorage.removeItem(KEY); } catch { /* storage unavailable */ } },
+  get: (): string | null => accessToken,
+  set(value: string | null) { accessToken = value; },
 };
 
-export async function api<T>(path: string, options: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
+let refreshing: Promise<{ token: string; user: User } | null> | null = null;
+/** Exchange the refresh cookie for a new access token. Shared by concurrent callers. */
+export function refreshSession() {
+  refreshing ||= fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'same-origin', headers: { 'x-drop-csrf': '1' } })
+    .then(async (r) => (r.ok ? r.json() : null))
+    .then((d) => { accessToken = d?.token || null; return d; })
+    .catch(() => null)
+    .finally(() => { setTimeout(() => { refreshing = null; }, 0); });
+  return refreshing;
+}
+
+const BOT_CHECKED = /^\/(auth\/(login|register)|drivers\/apply|enquiries|bookings)$/;
+
+export async function api<T>(path: string, options: { method?: string; body?: unknown; form?: FormData } = {}, retried = false): Promise<T> {
   const headers: Record<string, string> = {};
   const t = token.get();
   if (t) headers.authorization = `Bearer ${t}`;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
+  const method = options.method || (options.body || options.form ? 'POST' : 'GET');
+  let body = options.body;
+  if (method === 'POST' && BOT_CHECKED.test(path) && body && typeof body === 'object') {
+    const key = await turnstileSiteKey(BASE);
+    if (key) body = { ...(body as object), turnstileToken: await turnstileToken(key) };
+  }
   let res: Response;
   try {
     res = await fetch(BASE + path, {
-      method: options.method || (options.body || options.form ? 'POST' : 'GET'),
+      method,
       headers,
-      body: options.form || (options.body !== undefined ? JSON.stringify(options.body) : undefined),
+      credentials: 'same-origin',
+      body: options.form || (body !== undefined ? JSON.stringify(body) : undefined),
     });
   } catch {
     throw new ApiError(0, 'We could not reach DROP. Please check your connection and try again.');
+  }
+  // Access token expired: renew it once from the refresh cookie and try again.
+  if (res.status === 401 && t && !retried && !path.startsWith('/auth/')) {
+    if (await refreshSession()) return api<T>(path, options, true);
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data.error || 'Something went wrong. Please try again.', data.code);

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, token, type User } from './api';
+import { api, token, refreshSession, BASE, type User } from './api';
 
 interface AuthValue {
   user: User | null;
@@ -17,7 +17,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!token.get()) { setUser(null); return; }
+    if (!token.get()) {
+      // After a reload the access token is gone; the refresh cookie (if any) restores the session.
+      const r = await refreshSession();
+      setUser(r?.user || null);
+      return;
+    }
     try { setUser((await api<{ user: User }>('/auth/me')).user); }
     catch { token.set(null); setUser(null); }
   }, []);
@@ -27,7 +32,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthValue>(() => ({
     user, ready, refresh, setUser,
     signIn: (t, u) => { token.set(t); setUser(u); },
-    signOut: () => { token.set(null); setUser(null); },
+    signOut: () => {
+      void fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'same-origin', headers: { 'x-drop-csrf': '1' } }).catch(() => {});
+      token.set(null); setUser(null);
+    },
   }), [user, ready, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

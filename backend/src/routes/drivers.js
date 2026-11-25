@@ -3,7 +3,8 @@ import { db, id, now, nextRef } from '../db.js';
 import { getVerification, recompute } from '../kyc.js';
 import { settleTrip } from '../money/settlement.js';
 import { walletBalance, cents } from '../money/ledger.js';
-import { optionalAuth, requireRole, signToken, publicUser } from '../auth.js';
+import { optionalAuth, requireRole, publicUser } from '../auth.js';
+import { issueSession } from '../sessions.js';
 import { createUser } from './auth.js';
 import { sameWorld } from '../demoPolicy.js';
 import { view, setStatus } from './bookings.js';
@@ -28,13 +29,13 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
       pw: password(b.password),
       role: 'driver',
     });
-    token = signToken(user);
+    token = issueSession(req, res, user).token;
   } else if (user.role !== 'driver') {
     if (user.role !== 'passenger') throw bad('Business and staff accounts cannot apply as drivers. Please use a personal account.');
     user = db.update('users', user.id, { role: 'driver', driverStatus: 'pending', online: false });
     const v = db.find('verifications', (x) => x.userId === user.id);
     if (v) db.update('verifications', v.id, { role: 'driver', decision: null });
-    token = signToken(user);
+    token = issueSession(req, res, user).token;
   }
   if (db.find('applications', (a) => a.userId === user.id && ['submitted', 'under_review', 'approved'].includes(a.status))) {
     throw new HttpError(409, 'You already have an application on file. You can track it in your dashboard.');
