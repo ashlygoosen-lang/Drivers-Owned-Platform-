@@ -8,7 +8,7 @@ import { isDemoUser } from '../demoPolicy.js';
 // wait BANK_CHANGE_HOLD_HOURS, so a stolen session can't redirect a driver's earnings straight away.
 const BANK_HOLD_H = () => Number(process.env.BANK_CHANGE_HOLD_HOURS ?? 24);
 import { COMPANY } from '../config.js';
-import { encryptText, decryptText, getVerification, recompute, audit } from '../kyc.js';
+import { encryptText, decryptText, getVerification, recompute, audit, revealIdNumber } from '../kyc.js';
 import { post, cents, rands, balance, walletAccount, walletBalance, statement, trialBalance } from '../money/ledger.js';
 import { recordCardPayment, recordRefund } from '../money/settlement.js';
 import * as paystack from '../money/paystack.js';
@@ -187,7 +187,7 @@ router.post('/wallet/card', driverOnly, wrap(async (req, res) => {
   const v = getVerification(u.id);
   const [firstName, ...rest] = (v.profile.legalName || u.name).split(' ');
   const reference = walletRef(u);
-  const r = await pty.createLinkedCard({ reference, firstName, lastName: rest.join(' ') || firstName, idOrPassport: v.profile.idNumber, cellphone: u.phone });
+  const r = await pty.createLinkedCard({ reference, firstName, lastName: rest.join(' ') || firstName, idOrPassport: revealIdNumber(v.profile), cellphone: u.phone });
   if (r.resultCode !== 1) throw new HttpError(502, `The card could not be issued (${r.resultText || r.resultCode}).`);
   const card = db.insert('cards', {
     id: id(), userId: u.id, reference, type: 'virtual', programme: PTY.programme, maskedNumber: r.cardNumber, validDate: r.validDate,

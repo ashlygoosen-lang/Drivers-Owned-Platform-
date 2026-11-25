@@ -4,7 +4,7 @@ import { db, id, now } from '../db.js';
 import { requireAuth, requireRole } from '../auth.js';
 import {
   DOC_TYPES, PROVINCES, requirementsFor, getVerification, currentDocs, recompute, missingProfile,
-  checkSaId, sniff, storeEncrypted, readDecrypted, removeFile, mask,
+  checkSaId, sniff, storeEncrypted, readDecrypted, removeFile, mask, sealIdNumber, revealIdNumber, idHash,
 } from '../kyc.js';
 import { str, phone, oneOf, wrap, bad, HttpError } from '../validate.js';
 
@@ -15,8 +15,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 *
 /** What the owner (or staff) sees. ID numbers are masked except for staff reviewing the file. */
 export function present(v, { reveal = false } = {}) {
   const req = requirementsFor(v.role) || { required: [], optional: [] };
-  const profile = { ...v.profile };
-  if (!reveal && profile.idNumber) profile.idNumber = mask(profile.idNumber);
+  const { idNumberEnc, idNumberHash, idNumberMasked, ...profile } = v.profile || {}; // eslint-disable-line no-unused-vars
+  const full = revealIdNumber(v.profile);
+  if (full) profile.idNumber = reveal ? full : idNumberMasked || mask(full);
   return {
     id: v.id,
     userId: v.userId,
@@ -53,8 +54,9 @@ router.put('/verification/profile', requireAuth, wrap(async (req, res) => {
   const b = req.body || {};
   const idType = oneOf(b.idType, ['sa_id', 'passport'], 'Identity document type');
   // A blank ID field keeps the saved number (the form never receives the full number back).
-  const keep = !String(b.idNumber || '').trim() && v.profile.idNumber && v.profile.idType === idType;
-  let idNumber = keep ? v.profile.idNumber : str(b.idNumber, idType === 'sa_id' ? 'ID number' : 'Passport number', { min: 5, max: 20 }).replace(/\s/g, '').toUpperCase();
+  const saved = revealIdNumber(v.profile);
+  const keep = !String(b.idNumber || '').trim() && saved && v.profile.idType === idType;
+  let idNumber = keep ? saved : str(b.idNumber, idType === 'sa_id' ? 'ID number' : 'Passport number', { min: 5, max: 20 }).replace(/\s/g, '').toUpperCase();
   let dateOfBirth = str(b.dateOfBirth, 'Date of birth', { optional: true, max: 10 });
   if (idType === 'sa_id') dateOfBirth = checkSaId(idNumber);
   else if (!/^[A-Z0-9]{5,20}$/.test(idNumber)) throw bad('Passport numbers contain only letters and digits.');
@@ -81,9 +83,10 @@ router.put('/verification/profile', requireAuth, wrap(async (req, res) => {
   };
   if (!/^\d{4}$/.test(profile.postalCode)) throw bad('Postal codes have 4 digits.');
   if (profile.registrationNumber && !/^\d{4}\/\d{6}\/\d{2}$/.test(profile.registrationNumber)) throw bad('Company registration numbers look like 2018/079316/07.');
-  const dup = db.find('verifications', (x) => x.userId !== v.userId && x.profile?.idNumber === idNumber && x.status !== 'not_started');
+  const hash = idHash(idNumber);
+  const dup = db.find('verifications', (x) => x.userId !== v.userId && (x.profile?.idNumberHash === hash || x.profile?.idNumber === idNumber) && x.status !== 'not_started');
   if (dup) throw bad('This identity number is already linked to another DROP account. Please contact support.');
-  db.update('verifications', v.id, { profile });
+  db.update('verifications', v.id, { profile: sealIdNumber(profile, idNumber) });
   recompute(v);
   res.json({ verification: present(v) });
 }));

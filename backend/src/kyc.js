@@ -111,6 +111,28 @@ export function decryptText(b64) {
   return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8');
 }
 
+/* ---------------- Identity numbers at rest (SEC-008) ----------------
+ * ID / passport numbers are stored encrypted (idNumberEnc), with a keyed hash (idNumberHash) for the
+ * duplicate-ID check and a masked copy for display. Only compliance review and card issuing decrypt them.
+ */
+const ID_HASH_KEY = crypto.createHmac('sha256', KEY).update('drop:id-number-hash').digest();
+export const idHash = (n) => crypto.createHmac('sha256', ID_HASH_KEY).update(String(n).toUpperCase()).digest('hex');
+export function sealIdNumber(profile, idNumber) {
+  const { idNumber: _plain, ...rest } = profile; // eslint-disable-line no-unused-vars
+  return { ...rest, idNumberEnc: encryptText(idNumber), idNumberHash: idHash(idNumber), idNumberMasked: mask(idNumber) };
+}
+export function revealIdNumber(profile = {}) {
+  if (profile.idNumberEnc) return decryptText(profile.idNumberEnc);
+  return profile.idNumber || '';
+}
+/** One-off migration of any plain-text ID numbers already stored. Safe to run on every start. */
+export function migrateIdNumbers() {
+  let n = 0;
+  for (const v of db.all('verifications')) if (v.profile?.idNumber) { v.profile = sealIdNumber(v.profile, v.profile.idNumber); n++; }
+  if (n) { db.save(); console.log(`[drop] Encrypted ${n} stored identity number(s).`); }
+  return n;
+}
+
 /* ---------------- Records ---------------- */
 export function requirementsFor(role) {
   return REQUIREMENTS[role] || null;
@@ -175,8 +197,30 @@ export function notify(userId, title, body, link = 'verification') {
   db.insert('notifications', { id: id(), userId, title, body, link, read: false, createdAt: now() });
 }
 
+/**
+ * Append-only, hash-chained audit log (SEC-013). Each entry stores the hash of the previous one, so
+ * editing or deleting any past entry breaks the chain, which verifyAuditChain() and the daily
+ * check report.
+ */
+const auditHash = (e) => crypto.createHash('sha256').update(JSON.stringify([e.prevHash, e.id, e.actorId, e.actorRole, e.action, e.subjectId, e.detail, e.at])).digest('hex');
 export function audit(actor, action, subjectId, detail = {}) {
-  db.insert('audit', { id: id(), actorId: actor.id, actorName: actor.name, actorRole: actor.role, action, subjectId, detail, at: now() });
+  const list = db.all('audit');
+  const prev = list.at(-1);
+  const e = { id: id(), actorId: actor?.id || 'system', actorName: actor?.name || 'System', actorRole: actor?.role || 'system', action, subjectId, detail: Object.fromEntries(Object.entries(detail).map(([k, v]) => [k, String(v)])), at: now(), prevHash: prev?.hash || 'genesis' };
+  e.hash = auditHash(e);
+  db.insert('audit', e);
+  return e;
+}
+export function verifyAuditChain() {
+  let prev = null;
+  let legacy = 0;
+  for (const [i, e] of db.all('audit').entries()) {
+    if (!e.hash) { legacy++; prev = null; continue; } // entries written before chaining existed
+    if (prev !== null && e.prevHash !== prev) return { ok: false, brokenAt: i, id: e.id, legacy };
+    if (auditHash(e) !== e.hash) return { ok: false, brokenAt: i, id: e.id, legacy };
+    prev = e.hash;
+  }
+  return { ok: true, entries: db.all('audit').length, legacy };
 }
 
 /** Profile completeness rules per role. */
@@ -184,5 +228,5 @@ export function missingProfile(role, p = {}) {
   const need = ['legalName', 'idType', 'idNumber', 'dateOfBirth', 'nationality', 'addressLine1', 'city', 'province', 'postalCode'];
   if (role === 'driver') need.push('emergencyName', 'emergencyPhone');
   if (role === 'business') need.push('companyName', 'registrationNumber');
-  return need.filter((k) => !p[k]);
+  return need.filter((k) => (k === 'idNumber' ? !(p.idNumberEnc || p.idNumber) : !p[k]));
 }

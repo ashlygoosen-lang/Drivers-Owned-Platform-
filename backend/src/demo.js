@@ -11,7 +11,7 @@
 import crypto from 'node:crypto';
 import { db, id, now, nextRef } from './db.js';
 import { hashPassword } from './auth.js';
-import { DOC_TYPES, REQUIREMENTS, storeEncrypted, encryptText } from './kyc.js';
+import { DOC_TYPES, REQUIREMENTS, storeEncrypted, encryptText, sealIdNumber } from './kyc.js';
 import { quote } from './pricing.js';
 import { post, cents, walletAccount } from './money/ledger.js';
 import { recordCardPayment, settleTrip } from './money/settlement.js';
@@ -78,7 +78,7 @@ function addVerification(user, { status, profile, docStatuses = {}, submittedDay
   });
   const decided = status === 'verified';
   db.insert('verifications', {
-    id: id(), userId: user.id, role: user.role, profile, documents, status,
+    id: id(), userId: user.id, role: user.role, profile: profile.idNumber ? sealIdNumber(profile, profile.idNumber) : profile, documents, status,
     consentAt: iso(submittedDaysAgo), submittedAt: status === 'in_progress' ? null : iso(submittedDaysAgo),
     decision: decided ? 'approved' : null, decidedAt: decided ? iso(submittedDaysAgo - 1) : null, decidedBy: decided ? 'Nomsa Khumalo' : null, decisionNote: '',
     history: [{ status: 'submitted', at: iso(submittedDaysAgo) }, ...(decided ? [{ status: 'verified', at: iso(submittedDaysAgo - 1), by: 'Nomsa Khumalo' }] : [])],
