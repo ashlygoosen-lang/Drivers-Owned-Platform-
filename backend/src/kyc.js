@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UPLOAD_DIR, JWT_SECRET, IS_PROD } from './config.js';
 import { db, id, now } from './db.js';
+import { pushTo } from './push.js';
 import { bad } from './validate.js';
 
 export const DOC_TYPES = {
@@ -193,8 +194,9 @@ export function syncUser(v) {
   db.update('users', user.id, patch);
 }
 
-export function notify(userId, title, body, link = 'verification') {
+export function notify(userId, title, body, link = 'verification', { push = true } = {}) {
   db.insert('notifications', { id: id(), userId, title, body, link, read: false, createdAt: now() });
+  if (push) void pushTo(userId, { title, body, data: { type: link } }); // also to the user's phones (apps)
 }
 
 /**

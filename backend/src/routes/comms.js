@@ -5,6 +5,7 @@ import { notify, audit } from '../kyc.js';
 import { str, oneOf, wrap, bad, HttpError } from '../validate.js';
 import { issueTicket, redeemTicket, subscribe, emit, isOnline } from '../comms/hub.js';
 import { phoneMode, e164, bridgeCall, iceServers } from '../comms/phone.js';
+import { pushTo, hasDevices } from '../push.js';
 
 /**
  * Driver ↔ passenger communication for a trip: chat, in-app voice and video calls (WebRTC, signalled
@@ -64,7 +65,7 @@ function pushOrNotify(userId, booking, title, body) {
   const key = `${userId}:${booking.id}`;
   if (Date.now() - (lastPing.get(key) || 0) < 5 * 60_000) return;
   lastPing.set(key, Date.now());
-  notify(userId, title, body, 'trips');
+  notify(userId, title, body, 'trips', { push: false }); // chat pushes are sent per message
 }
 
 function system(b, text) {
@@ -122,6 +123,7 @@ router.post('/bookings/:id/messages', requireAuth, wrap(async (req, res) => {
   const m = db.insert('messages', { id: id(), bookingId: b.id, senderId: req.user.id, senderRole: side, senderName: firstName(req.user.name), kind: 'text', text, createdAt: now() });
   emit(other.id, 'message', shape(m, other.id));
   pushOrNotify(other.id, b, `New message from ${firstName(req.user.name)}`, `${b.ref}: ${text.slice(0, 120)}`);
+  if (!isOnline(other.id)) void pushTo(other.id, { title: firstName(req.user.name), body: text.slice(0, 140), data: { type: 'message', bookingId: b.id } });
   res.status(201).json({ message: shape(m, req.user.id) });
 }));
 
@@ -170,7 +172,7 @@ router.post('/bookings/:id/calls', requireAuth, wrap(async (req, res) => {
     if (!live.has(c.id) || Date.now() - Date.parse(c.createdAt) > 4 * 3_600_000) endCall(c, c.status === 'ringing' ? 'missed' : 'completed');
     else throw new HttpError(409, 'There is already a call on this trip.');
   }
-  if (!isOnline(other.id)) {
+  if (!isOnline(other.id) && !hasDevices(other.id)) {
     system(b, `${firstName(req.user.name)} tried to ${kind === 'video' ? 'video call' : 'call'}. ${side === 'passenger' ? 'Your driver' : 'Your passenger'} was offline, so we sent a notification.`);
     notify(other.id, `Missed ${kind === 'video' ? 'video call' : 'call'}`, `${firstName(req.user.name)} tried to reach you about ${b.ref}. Open DROP to reply.`, 'trips');
     throw new HttpError(409, `${side === 'passenger' ? 'Your driver' : 'Your passenger'} is not in the DROP app right now. We’ve let them know. You can send a message${phoneMode() !== 'off' ? ' or phone them' : ''}.`);
@@ -178,6 +180,8 @@ router.post('/bookings/:id/calls', requireAuth, wrap(async (req, res) => {
   const call = db.insert('calls', { id: id(), bookingId: b.id, kind, callerId: req.user.id, calleeId: other.id, callerName: firstName(req.user.name), status: 'ringing', createdAt: now() });
   live.set(call.id, { timer: setTimeout(() => { const c = db.find('calls', (x) => x.id === call.id); if (c?.status === 'ringing') endCall(c, 'missed'); }, RING_MS) });
   emit(other.id, 'call:ring', { callId: call.id, bookingId: b.id, ref: b.ref, kind, from: firstName(req.user.name), fromRole: side });
+  // The other person's phone app may be in the background: ring it with a time-sensitive push.
+  void pushTo(other.id, { title: `${firstName(req.user.name)} is ${kind === 'video' ? 'video ' : ''}calling`, body: `DROP trip ${b.ref}. Tap to answer.`, data: { type: 'call', callId: call.id, bookingId: b.id, kind, from: firstName(req.user.name) }, priority: 'call', ttl: 40, sound: 'default' });
   res.status(201).json({ call: { id: call.id, kind, status: call.status, with: firstName(other.name) } });
 }));
 
