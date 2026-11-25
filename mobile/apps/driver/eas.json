@@ -1,0 +1,9 @@
+{
+  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
+  "build": {
+    "development": { "developmentClient": true, "distribution": "internal", "env": { "DROP_API_URL": "https://staging.drop.example.com" } },
+    "preview": { "distribution": "internal", "channel": "preview", "env": { "DROP_API_URL": "https://staging.drop.example.com" } },
+    "production": { "autoIncrement": true, "channel": "production", "env": { "DROP_API_URL": "https://drop.example.com" } }
+  },
+  "submit": { "production": { "android": { "track": "internal" }, "ios": {} } }
+}

@@ -1,0 +1,22 @@
+# End-to-end: verified, approved test driver goes online, accepts a request, runs it to completion.
+# Create the request first with the passenger flow (or the API) on STAGING.
+appId: za.co.drop.driver
+---
+- launchApp: { clearState: true }
+- tapOn: "Email address"
+- inputText: ${EMAIL}
+- tapOn: "Password"
+- inputText: ${PASSWORD}
+- tapOn: "Sign in"
+- tapOn: { id: "Online" }
+- tapOn: "I understand, continue"
+- runFlow: { when: { visible: "Allow.*" }, commands: [ { tapOn: "Allow.*" } ] }
+- assertVisible: "You’re online"
+- assertVisible: "Accept request"
+- tapOn: "Accept request"
+- tapOn: "I’m on my way to the pickup"
+- tapOn: "Passenger collected · start trip"
+- tapOn: "Complete trip"
+- tapOn: "Complete"
+- tapOn: "Earnings"
+- assertVisible: "Available balance"
