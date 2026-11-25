@@ -124,9 +124,10 @@ router.post('/verification/documents', requireAuth, upload.single('file'), wrap(
     size: req.file.size, status: 'pending', reason: '', expiresAt, issuedAt, uploadedAt: now(), reviewedAt: null, reviewedBy: null,
   };
   v.documents.push(doc);
-  // A new document after a decision needs a fresh review.
+  // A new required document after a decision needs a fresh review of the account. Optional extras
+  // (e.g. scholar-transport clearances) are reviewed on their own and never take a driver offline.
   const patch = { documents: v.documents };
-  if (v.status === 'verified' || v.status === 'action_required') Object.assign(patch, { decision: null });
+  if ((v.status === 'verified' || v.status === 'action_required') && req_.required.includes(type)) Object.assign(patch, { decision: null });
   db.update('verifications', v.id, patch);
   recompute(v);
   const { file, ...safe } = doc;
