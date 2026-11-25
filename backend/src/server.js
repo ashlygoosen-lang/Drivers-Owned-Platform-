@@ -9,6 +9,7 @@ import { initErrorTracking, securityEvent } from './monitor.js';
 import { pruneSessions } from './sessions.js';
 import { verifyAuditChain } from './kyc.js';
 import { runBackup } from './backup.js';
+import { purgeExpiredKyc } from './routes/account.js';
 
 await initKv(); // Redis for shared rate limits and lockouts (falls back to memory)
 await initErrorTracking();
@@ -26,6 +27,8 @@ server.keepAliveTimeout = 65_000; // longer than common load-balancer idle timeo
 // Daily housekeeping and tamper check of the audit log.
 const daily = () => {
   pruneSessions();
+  const purged = purgeExpiredKyc();
+  if (purged) securityEvent('kyc_retention_purge', { records: String(purged) });
   const check = verifyAuditChain();
   if (!check.ok) securityEvent('audit_chain_broken', { at: String(check.brokenAt), id: check.id }, 'high');
   if (process.env.BACKUP_KEY) {

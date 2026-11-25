@@ -69,7 +69,7 @@ export const maintenanceOn = () => String(process.env.MAINTENANCE_MODE || '').to
 const STAFF = ['admin', 'compliance', 'support', 'finance'];
 export function maintenance(req, res, next) {
   if (!maintenanceOn()) return next();
-  if (/^\/api\/(health|company|maps\/config|security\/config|auth\/(login|mfa|refresh|logout|me)|payments\/paystack\/webhook|paymentology\/remote)/.test(req.originalUrl)) return next();
+  if (/^\/api\/(health|company|app\/config|maps\/config|security\/config|auth\/(login|mfa|refresh|logout|me)|payments\/paystack\/webhook|paymentology\/remote)/.test(req.originalUrl)) return next();
   const h = req.get('authorization') || '';
   try {
     const p = h.startsWith('Bearer ') ? jwt.verify(h.slice(7), JWT_SECRET) : null;

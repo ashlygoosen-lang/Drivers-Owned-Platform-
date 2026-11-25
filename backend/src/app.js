@@ -17,6 +17,8 @@ import verificationRoutes from './routes/verification.js';
 import complianceRoutes from './routes/compliance.js';
 import commsRoutes from './routes/comms.js';
 import trackingRoutes from './routes/tracking.js';
+import accountRoutes from './routes/account.js';
+import { attestRouter, requireIntegrity } from './attest.js';
 import moneyRoutes, { paystackWebhook } from './routes/money.js';
 import { remoteRouter } from './money/paymentology/remote.js';
 
@@ -73,11 +75,17 @@ export function createApp() {
   app.use(['/api/auth/login', '/api/auth/register'], limiter('auth', 25, 15, { byIp: true, message: 'Too many sign-in attempts from this network. Please wait 15 minutes.' }));
   app.use(['/api/auth/mfa'], limiter('mfa', 30, 15, { byIp: true }));
   app.use(['/api/auth/refresh'], limiter('refresh', 120, 15, { byIp: true }));
+  app.use(['/api/auth/password'], limiter('password', 10, 15, { byIp: true }));
   app.use(['/api/enquiries', '/api/drivers/apply'], limiter('forms', 15, 15, { byIp: true }));
   app.post('/api/verification/documents', limiter('uploads', 60, 15));
   app.post('/api/bookings', limiter('bookings', Number(process.env.RATE_LIMIT_BOOKINGS || 20), 60, { message: 'You’ve made a lot of bookings in the last hour. Please wait a little, or contact support.' }));
-  app.post(['/api/auth/login', '/api/auth/register', '/api/drivers/apply', '/api/enquiries', '/api/bookings'], botCheck());
+  app.post(['/api/auth/login', '/api/auth/register', '/api/auth/password/forgot', '/api/drivers/apply', '/api/enquiries', '/api/bookings'], botCheck());
 
+  // Mobile apps: genuine-app checks on sign-in, booking, payments and withdrawals (ATTESTATION_MODE).
+  app.use(['/api/app/attest'], limiter('attest', 60, 15, { byIp: true }));
+  app.post(['/api/auth/login', '/api/auth/register', '/api/bookings', '/api/payments/bookings/:id/checkout', '/api/wallet/withdrawals', '/api/wallet/bank-account'], requireIntegrity());
+  app.put('/api/wallet/bank-account', requireIntegrity());
+  app.use('/api', attestRouter);
   app.get('/api/security/config', (_req, res) => res.json({ turnstileSiteKey: turnstileOn() ? process.env.TURNSTILE_SITE_KEY || null : null, maintenance: maintenanceOn() }));
   // Admin: tamper check of the audit log, recent security events, maintenance switch.
   app.get('/api/admin/security', requireRole('admin'), (_req, res) => {
@@ -95,8 +103,19 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'drop-api', time: now() }));
   app.get('/api/company', (_req, res) => res.json(COMPANY));
   app.use('/api/auth', authRoutes);
-  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, commsRoutes, trackingRoutes, moneyRoutes, adminRoutes);
+  app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, commsRoutes, trackingRoutes, accountRoutes, moneyRoutes, adminRoutes);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
+
+  // Universal links (iOS) and App Links (Android): reset-password and trip links open the apps.
+  app.get('/.well-known/apple-app-site-association', (_req, res) => {
+    const team = process.env.APPLE_TEAM_ID;
+    const ids = team ? [`${team}.${process.env.IOS_BUNDLE_PASSENGER || 'za.co.drop.passenger'}`, `${team}.${process.env.IOS_BUNDLE_DRIVER || 'za.co.drop.driver'}`] : [];
+    res.type('application/json').json({ applinks: { details: [{ appIDs: ids, components: [{ '/': '/reset-password*' }, { '/': '/trip/*' }] }] }, webcredentials: { apps: ids } });
+  });
+  app.get('/.well-known/assetlinks.json', (_req, res) => {
+    const prints = (process.env.ANDROID_CERT_SHA256 || '').split(',').map((s) => s.trim()).filter(Boolean);
+    res.json(['za.co.drop.passenger', 'za.co.drop.driver'].map((pkg) => ({ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: pkg, sha256_cert_fingerprints: prints } })));
+  });
 
   // Serve the built React app (single-service deploy) with SPA fallback.
   if (fs.existsSync(FRONTEND_DIST)) {

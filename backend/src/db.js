@@ -27,6 +27,9 @@ const EMPTY = {
   messages: [],
   calls: [],
   sessions: [],
+  devices: [],
+  passwordResets: [],
+  attestKeys: [],
   securityEvents: [],
   counters: { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0 },
 };
