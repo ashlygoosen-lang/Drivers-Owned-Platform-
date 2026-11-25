@@ -17,6 +17,7 @@ function Shell() {
     if ((d.type === 'message' || d.type === 'trips') && d.bookingId) router.push(`/trip/${d.bookingId}`);
     else if (d.type === 'verification') router.push('/verification');
     else if (d.type === 'plans') router.push('/(tabs)/plans');
+    else if (d.type === 'travel') router.push('/(tabs)/travel');
     else if (d.type === 'trip' && d.bookingId) router.push(`/trip/${d.bookingId}`);
   }), [user]);
   if (!ready) return null;
@@ -34,6 +35,9 @@ function Shell() {
         <Stack.Screen name="support" options={{ title: 'Support' }} />
         <Stack.Screen name="plan/new" options={{ title: 'New monthly plan' }} />
         <Stack.Screen name="plan/[id]" options={{ title: 'Monthly plan' }} />
+        <Stack.Screen name="travel/search" options={{ title: 'Find a group' }} />
+        <Stack.Screen name="travel/join" options={{ title: 'Join the group' }} />
+        <Stack.Screen name="travel/[id]" options={{ title: 'Group trip' }} />
       </Stack>
       <CallScreen />
     </CallsProvider>

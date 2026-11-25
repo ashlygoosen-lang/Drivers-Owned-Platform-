@@ -8,6 +8,7 @@ export default function TabsLayout() {
   return <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.orange, tabBarInactiveTintColor: colors.muted, tabBarStyle: { minHeight: 60 }, tabBarLabelStyle: { fontSize: 12, fontWeight: '600' } }}>
     <Tabs.Screen name="index" options={{ title: 'Ride', ...tab('car') }} />
     <Tabs.Screen name="trips" options={{ title: 'Trips', ...tab('time') }} />
+    <Tabs.Screen name="travel" options={{ title: 'Travel', ...tab('airplane') }} />
     <Tabs.Screen name="plans" options={{ title: user.role === 'business' ? 'Staff' : 'School', ...tab(user.role === 'business' ? 'business' : 'school') }} />
     <Tabs.Screen name="notifications" options={{ title: 'Inbox', ...tab('notifications') }} />
     <Tabs.Screen name="account" options={{ title: 'Account', ...tab('person-circle') }} />
