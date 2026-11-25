@@ -13,6 +13,7 @@ import { startCluster, seed, query } from '../test/scale/fixture.js';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? Number(process.argv[i + 1]) : d; };
 const INSTANCES = arg('instances', 2), RATE = arg('rate', 33), DURATION = arg('duration', 60), DRIVERS = arg('drivers', 400);
+const DISPATCH = (() => { const i = process.argv.indexOf('--dispatch'); return i > 0 ? process.argv[i + 1] : 'nearest'; })();
 const DB = process.env.LOAD_DATABASE_URL, REDIS = process.env.LOAD_REDIS_URL;
 if (!DB || !REDIS) { console.error('Set LOAD_DATABASE_URL and LOAD_REDIS_URL'); process.exit(1); }
 
@@ -33,7 +34,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await query(DB, 'drop table if exists drop_docs, drop_counters cascade; drop sequence if exists drop_seq');
 console.log(`Starting ${INSTANCES} instances…`);
-const cluster = await startCluster({ databaseUrl: DB, redisUrl: REDIS, instances: INSTANCES, basePort: 4850 });
+const cluster = await startCluster({ databaseUrl: DB, redisUrl: REDIS, instances: INSTANCES, basePort: 4850, env: { DISPATCH_MODE: DISPATCH } });
 const bases = cluster.instances.map((s) => s.base);
 const passengersNeeded = Math.ceil(RATE * DURATION) + 50;
 console.log(`Seeding ${DRIVERS} drivers and ${passengersNeeded} passengers…`);
@@ -61,8 +62,11 @@ const driverLoops = people.drivers.map(async (d, i) => {
     }
     const open = r.data.requests || [];
     if (open.length) {
-      const pick = open[Math.floor(Math.random() * Math.min(open.length, 5))];
-      await timed('POST /drivers/bookings/:id/accept', base, 'POST', `/drivers/bookings/${pick.id}/accept`, { token: d.token });
+      // A person reads the request before tapping Accept, and waits for the list to refresh if it was taken.
+      const pick = open[Math.floor(Math.random() * Math.min(open.length, 3))];
+      await sleep(400 + Math.random() * 1200);
+      const a = await timed('POST /drivers/bookings/:id/accept', base, 'POST', `/drivers/bookings/${pick.id}/accept`, { token: d.token });
+      if (a.status !== 200) await sleep(1000);
       continue;
     }
     await sleep(800 + Math.random() * 400);
@@ -103,7 +107,7 @@ const [ledger] = await query(DB, "select coalesce(sum((l->>'dr')::bigint),0)::te
 const rows = [...stats.entries()].map(([name, s]) => ({ name, n: s.lat.length, p50: pct(s.lat, 50), p95: pct(s.lat, 95), p99: pct(s.lat, 99), codes: s.codes }));
 const total = rows.reduce((a, r) => a + r.n, 0);
 const result = {
-  config: { instances: INSTANCES, rateTarget: `${RATE}/s (${RATE * 60}/min)`, duration: `${DURATION}s`, drivers: DRIVERS, cpuCores: (await import('node:os')).cpus().length },
+  config: { dispatch: DISPATCH, instances: INSTANCES, rateTarget: `${RATE}/s (${RATE * 60}/min)`, duration: `${DURATION}s`, drivers: DRIVERS, cpuCores: (await import('node:os')).cpus().length },
   bookings: { offered, created: booked, completed, perMinute: Math.round((booked / DURATION) * 60) },
   requests: { total, perSecond: Math.round(total / (DURATION + 15)) },
   latencyMs: rows.map((r) => ({ endpoint: r.name, count: r.n, p50: Math.round(r.p50), p95: Math.round(r.p95), p99: Math.round(r.p99), statuses: r.codes })),

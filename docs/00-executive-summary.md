@@ -61,7 +61,7 @@ These are the first things to run once §5 items 1–8 are done.
 |---|---|---|
 | Owner configuration not done (secrets, demo mode, backups, MFA on GitHub) | **High until done** | §5 items 1–4: about an hour of work, mostly free |
 | Memory ceiling at sustained peak volume: each server keeps all records in memory | Medium (weeks away at target load) | Phase 6B-1 hot-data window, before sustained national volume |
-| Every open request is shown to every driver, so ~90% of peak traffic is wasted | Medium (cost and speed) | Phase 6B-2 proximity dispatch |
+| ~~Every open request shown to every driver~~ | Fixed 25 Nov | Proximity dispatch built: 100 % of trips matched vs 64 %, 60 % fewer wasted accepts (06 §5) |
 | CSP allows broad Google script sources (SEC-015) | Low | Move to Google's nonce-based strict CSP |
 | Staff start with an admin-chosen password (SEC-020) | Low (MFA required anyway) | Invite link with set-your-own password |
 | Payout CSV holds bank numbers (SEC-023) | Low (staff MFA and audit log) | Ask for an MFA code again at export |

@@ -82,7 +82,7 @@ Full ride lifecycle against **2 servers + PostgreSQL + Redis + the load generato
 
 Correctness after every run, checked directly in PostgreSQL: **0 duplicate references, 0 drivers with two active trips, 0 completed trips without settlement, ledger debits = credits.**
 
-**What the numbers mean.** Two cores ran out before the software did: ~1,375 requests/s with zero errors and every invariant intact. Latency rose because the CPU was full, not because of locks or the database. 92 % of the traffic in the test was drivers racing for trips somebody else had already taken (the app currently shows every open request to every nearby driver) — see 6B-2.
+**What the numbers mean.** Two cores ran out before the software did: ~1,375 requests/s with zero errors and every invariant intact. Latency rose because the CPU was full, not because of locks or the database. 92 % of the traffic in the test was drivers racing for trips somebody else had already taken, because every open request went to every driver. Proximity dispatch (6B-2, now built) fixes that.
 
 **A real bug found and fixed by the load test.** In the first 2,000/min run, 35 completed trips had their ledger entry but lost the `settledAt` mark. Cause: while the write queue worked through a batch, records further down the batch could be overwritten by a catch-up from another server, and the queued change then wrote `null`. Fixed in `db.js` (queued changes now carry their own values; the whole batch is protected before writing). The rerun had 0 unsettled trips. The reconciler would also have repaired these within 2 minutes, without double-paying (ledger keys are unique).
 
@@ -111,7 +111,15 @@ Always run at least **2 servers in production** so a deploy or crash never takes
 These are known limits, in priority order.
 
 1. **Hot-data window (memory ceiling) — HIGH.** Each server currently keeps every record in memory. At 2,000 bookings/min peak, a busy day adds hundreds of MB, so memory would run out within weeks. Fix: keep only open trips, recent trips (e.g. 30 days) and live records in memory; serve history, reports and the ledger with SQL queries. Until then, watch the memory graph on Railway and the write-queue/pool numbers on `/api/ready`.
-2. **Proximity dispatch — HIGH for cost.** Offer each request to the nearest few drivers (geohash in Redis) instead of every driver, with a short acceptance window before widening. This removes ~90 % of wasted requests and gives passengers faster matches.
+2. **Proximity dispatch — DONE (25 Nov 2026).** `src/dispatch.js` offers each request to the nearest 5 available drivers within 8 km, doubling the drivers and adding 5 km each minute, and falls back to every driver after 4 minutes. Requests are matched oldest first and a driver holds at most 2 offers, so clusters (malls, airports) spread out. Requests without coordinates, and drivers who share no GPS, keep the old behaviour. `DISPATCH_MODE=broadcast` switches it off; the other `DISPATCH_*` settings tune it. Side-by-side load test, same machine, ~1,100 bookings/min, drivers with human pacing:
+
+   | | Broadcast (before) | Nearest (now) |
+   |---|---|---|
+   | Trips matched and completed in the window | 726 of 1,126 (64 %) | **1,105 of 1,105 (100 %)** |
+   | Losing accept attempts | 20,801 (28 per match) | **8,358 (7.6 per match)** |
+   | Correctness checks | all pass | all pass |
+
+   Results: `backend/loadtest/results/2026-11-25-dispatch-*.json`. Tests: `test/dispatch.test.js`.
 3. **Push instead of polling.** The apps already have the live event stream; switch the driver request feed and trip status to it so idle phones stop polling.
 4. **Outbox for side effects.** Email, push and payment-provider calls go through a durable queue table so a crash between "trip completed" and "send receipt" can't drop the receipt.
 5. **Circuit breakers and timeouts** on Paystack, Twilio, Resend and Google Maps so a slow provider can't tie up servers.
