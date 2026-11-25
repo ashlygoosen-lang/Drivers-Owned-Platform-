@@ -18,3 +18,4 @@ export * from './components/Gates';
 export * from './screens/Auth';
 export * from './screens/Verification';
 export * from './screens/Account';
+export * from './lib/travel';
