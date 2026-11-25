@@ -21,6 +21,7 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
   if (b.consent !== true && String(b.consent) !== 'true') throw bad('Please accept the programme terms to continue.');
   let user = req.user;
   let token = null;
+  let refreshToken;
   if (!user) {
     user = await createUser({
       name: str(b.name, 'Full name', { min: 2, max: 80 }),
@@ -29,13 +30,13 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
       pw: password(b.password),
       role: 'driver',
     });
-    token = issueSession(req, res, user).token;
+    ({ token, refreshToken } = issueSession(req, res, user));
   } else if (user.role !== 'driver') {
     if (user.role !== 'passenger') throw bad('Business and staff accounts cannot apply as drivers. Please use a personal account.');
     user = db.update('users', user.id, { role: 'driver', driverStatus: 'pending', online: false });
     const v = db.find('verifications', (x) => x.userId === user.id);
     if (v) db.update('verifications', v.id, { role: 'driver', decision: null });
-    token = issueSession(req, res, user).token;
+    ({ token, refreshToken } = issueSession(req, res, user));
   }
   if (db.find('applications', (a) => a.userId === user.id && ['submitted', 'under_review', 'approved'].includes(a.status))) {
     throw new HttpError(409, 'You already have an application on file. You can track it in your dashboard.');
@@ -60,7 +61,7 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
     createdAt: now(),
   });
   db.update('users', user.id, { vehicle, driverStatus: 'pending' });
-  res.status(201).json({ application, token, user: publicUser(db.find('users', (u) => u.id === user.id)) });
+  res.status(201).json({ application, token, ...(refreshToken && { refreshToken }), user: publicUser(db.find('users', (u) => u.id === user.id)) });
 }));
 
 router.get('/drivers/application', requireRole('driver'), (req, res) => {

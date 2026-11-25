@@ -185,6 +185,12 @@ router.post('/bookings/:id/calls', requireAuth, wrap(async (req, res) => {
   res.status(201).json({ call: { id: call.id, kind, status: call.status, with: firstName(other.name) } });
 }));
 
+/** State of a call, for an app opened from a "calling" push notification. */
+router.get('/calls/:callId', requireAuth, wrap(async (req, res) => {
+  const c = loadCall(req);
+  res.json({ call: { id: c.id, bookingId: c.bookingId, kind: c.kind, status: c.status, from: c.callerName, incoming: c.calleeId === req.user.id } });
+}));
+
 router.post('/calls/:callId/accept', requireAuth, wrap(async (req, res) => {
   const call = loadCall(req);
   if (call.calleeId !== req.user.id || call.status !== 'ringing') throw new HttpError(409, 'This call has ended.');

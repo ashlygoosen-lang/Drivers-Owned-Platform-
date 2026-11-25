@@ -8,7 +8,7 @@ import * as kv from './kv.js';
 /**
  * App attestation (MASVS-RESILIENCE): proof that a sensitive request comes from a genuine, unmodified
  * DROP app on a real device, not a script or a repackaged app.
- *   Android: Google Play Integrity (classic request, nonce = server challenge).
+ *   Android: Google Play Integrity (standard request: requestHash = server challenge; classic nonce also accepted).
  *   iOS:     Apple App Attest (attestation registers a device key; each sensitive request carries an
  *            assertion signed by that key over the server challenge).
  * Flow: app gets a one-time challenge (POST /api/app/attest/challenge), then sends
@@ -86,7 +86,8 @@ export async function verifyAndroid(token, challenge, app) {
   const p = (await res.json()).tokenPayloadExternal;
   if (!p) return { ok: false, reason: 'undecodable' };
   if (p.requestDetails?.requestPackageName !== pkg) return { ok: false, reason: 'package' };
-  if (p.requestDetails?.nonce !== Buffer.from(challenge).toString('base64url') && p.requestDetails?.nonce !== challenge) return { ok: false, reason: 'nonce' };
+  const bound = p.requestDetails?.requestHash ?? p.requestDetails?.nonce;
+  if (bound !== challenge && bound !== Buffer.from(challenge).toString('base64url')) return { ok: false, reason: 'nonce' };
   if (Math.abs(Date.now() - Number(p.requestDetails?.timestampMillis || 0)) > 5 * 60_000) return { ok: false, reason: 'stale' };
   if (p.appIntegrity?.appRecognitionVerdict !== 'PLAY_RECOGNIZED') return { ok: false, reason: 'app_not_recognized' };
   if (!(p.deviceIntegrity?.deviceRecognitionVerdict || []).includes('MEETS_DEVICE_INTEGRITY')) return { ok: false, reason: 'device_integrity' };

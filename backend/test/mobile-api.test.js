@@ -130,7 +130,7 @@ test('App attestation: Play Integrity and App Attest, enforced on mobile sign-in
 
   // Android: genuine app on a genuine device
   let ch = (await call('POST', '/app/attest/challenge')).data.challenge;
-  integrityVerdicts.set('good-token', { requestDetails: { requestPackageName: 'za.co.drop.passenger', nonce: ch, timestampMillis: String(Date.now()) }, appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED' }, deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY'] } });
+  integrityVerdicts.set('good-token', { requestDetails: { requestPackageName: 'za.co.drop.passenger', requestHash: ch, timestampMillis: String(Date.now()) }, appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED' }, deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY'] } });
   assert.ok((await call('POST', '/auth/login', { body: login, headers: { ...mobile, 'x-drop-challenge': ch, 'x-drop-integrity': 'android good-token' } })).data.token);
   assert.equal((await call('POST', '/auth/login', { body: login, headers: { ...mobile, 'x-drop-challenge': ch, 'x-drop-integrity': 'android good-token' } })).status, 403, 'challenge is single-use');
   ch = (await call('POST', '/app/attest/challenge')).data.challenge;
