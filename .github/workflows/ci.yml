@@ -78,7 +78,7 @@ jobs:
           npm audit --prefix frontend --audit-level=high
           npm audit --prefix mobile --omit=dev --audit-level=high
       - name: OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
         with:
           scan-args: |-
             --config=osv-scanner.toml
