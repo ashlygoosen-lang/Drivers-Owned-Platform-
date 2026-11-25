@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { api, money, date } from '../lib/api';
+import { useCatalogue } from '../components/VehiclePicker';
+import { sideView } from '../lib/vehicleArt';
 import { useStepUp, downloadProtected, printProtected } from '../lib/stepUp';
 import { button, outline, input, Field, ErrorText, Icon, Spinner, StatusPill } from '../components/ui';
 import { useLoad, Loading, Empty, Table, type Notify } from '../dashboard/common';
@@ -165,6 +167,7 @@ function BookingCancel({ b, canWaive, onDone }: { b: StaffBooking; canWaive: boo
 const emptyPartner = { name: '', type: 'flight', contactName: '', contactEmail: '', contactPhone: '', defaultCapacity: 180, notes: '', active: true };
 function Partners({ notify, canWrite }: { notify: Notify; canWrite: boolean }) {
   const { data, reload } = useLoad<{ partners: Partner[] }>('/admin/travel/partners');
+  const catalogue = useCatalogue();
   const [edit, setEdit] = useState<(typeof emptyPartner & { id?: string }) | null>(null);
   const [error, setError] = useState('');
   async function save(e: React.FormEvent) {
@@ -175,8 +178,11 @@ function Partners({ notify, canWrite }: { notify: Notify; canWrite: boolean }) {
   return <div className="grid gap-4">
     {canWrite && !edit && <button className={`${outline} justify-self-start`} onClick={() => setEdit({ ...emptyPartner })}><Icon name="plus" size={17} />Add partner</button>}
     {edit && <form className="grid items-end gap-3 rounded-xl bg-[#f4f6f8] p-4 sm:grid-cols-3" onSubmit={save}>
-      <Field label="Airline or coach operator"><input className={input} required value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
+      <Field label="Airline or coach operator" hint={edit.type === 'bus' ? 'Coach companies for local travel' : 'Airlines (domestic and international)'}><input className={input} required list={`operators-${edit.type}`} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder={edit.type === 'bus' ? 'e.g. Intercape' : 'e.g. FlySafair'} /></Field>
+      <datalist id="operators-bus">{(catalogue?.operators.bus || []).map((o) => <option key={o} value={o} />)}</datalist>
+      <datalist id="operators-flight">{[...new Set([...(catalogue?.operators.flightDomestic || []), ...(catalogue?.operators.flightInternational || [])])].map((o) => <option key={o} value={o} />)}</datalist>
       <Field label="Type"><select className={input} value={edit.type} onChange={(e) => setEdit({ ...edit, type: e.target.value })}><option value="flight">Airline</option><option value="bus">Bus / coach</option></select></Field>
+      <div className="hidden items-end sm:flex" aria-hidden><span dangerouslySetInnerHTML={{ __html: sideView(edit.type === 'bus' ? 'bus' : 'plane', { width: 96 }) }} /></div>
       <Field label="Default capacity"><input type="number" min={1} className={input} value={edit.defaultCapacity} onChange={(e) => setEdit({ ...edit, defaultCapacity: Number(e.target.value) })} /></Field>
       <Field label="Groups desk contact"><input className={input} value={edit.contactName} onChange={(e) => setEdit({ ...edit, contactName: e.target.value })} /></Field>
       <Field label="Email"><input type="email" className={input} value={edit.contactEmail} onChange={(e) => setEdit({ ...edit, contactEmail: e.target.value })} /></Field>
@@ -186,7 +192,7 @@ function Partners({ notify, canWrite }: { notify: Notify; canWrite: boolean }) {
       <div className="flex gap-3 sm:col-span-3"><button className={button}>Save partner</button><button type="button" className={outline} onClick={() => setEdit(null)}>Cancel</button></div><div className="sm:col-span-3"><ErrorText>{error}</ErrorText></div>
     </form>}
     {!data.partners.length ? <Empty>No partners yet. Add the airlines and coach operators you have group agreements with.</Empty> : <Table head={['Partner', 'Contact', 'Routes', 'Owed', 'Status', '']} rows={data.partners.map((p) => [
-      <span key="n"><b>{p.name}</b><span className="block text-[12px]">{p.type === 'flight' ? 'Airline' : 'Coach'} · capacity {p.defaultCapacity}</span></span>,
+      <span key="n" className="flex items-center gap-3"><span className="w-14 shrink-0" aria-hidden dangerouslySetInnerHTML={{ __html: sideView(p.type === 'flight' ? 'plane' : 'bus', { width: 56 }) }} /><span><b>{p.name}</b><span className="block text-[12px]">{p.type === 'flight' ? 'Airline' : 'Coach'} · capacity {p.defaultCapacity}</span></span></span>,
       <span key="c">{p.contactName || '—'}<span className="block text-[12px]">{p.contactEmail}{p.contactPhone && ` · ${p.contactPhone}`}</span></span>,
       p.routes, money(p.owed), <StatusPill key="s" status={p.active ? 'active' : 'inactive'} />,
       canWrite ? <button key="e" className={outline} onClick={() => setEdit({ ...emptyPartner, ...p })}>Edit</button> : '',

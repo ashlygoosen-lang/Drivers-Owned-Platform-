@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { sideView } from '../lib/vehicleArt';
 import { api, money, date, token } from '../lib/api';
 export const GROUP_TRAVEL_PENDING = 'drop.groupTravel.pending';
 import { button, outline, input, Field, ErrorText, Icon, Spinner, StatusPill, Logo } from '../components/ui';
@@ -103,7 +104,8 @@ export function TravelSearch({ onJoin }: { onJoin: (sel: { routeId: string; depa
       const summary = `${r.route.typeLabel} · ${r.route.originName} → ${r.route.destinationName} · ${prettyDate(q.departureDate)}${!q.oneWay && q.returnDate ? ` – ${prettyDate(q.returnDate)}` : ''}`;
       return <article key={r.route.id} className="grid gap-4 rounded-2xl border border-[#e3e8ef] bg-white p-5 shadow-[0_8px_24px_#071b3a0d]">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#505d71]"><Icon name={r.route.type === 'flight' ? 'up' : 'car'} size={15} />{r.route.typeLabel} · {r.route.partner}{r.route.international && ' · International'}</p>
+          <span className="hidden w-[104px] shrink-0 sm:block" aria-hidden dangerouslySetInnerHTML={{ __html: sideView(r.route.type === 'flight' ? 'plane' : 'bus', { width: 104 }) }} />
+          <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#505d71]"><Icon name={r.route.type === 'flight' ? 'up' : 'car'} size={15} />{r.route.typeLabel} · {r.route.partner}{r.route.international && ' · International'}</p>
             <h4 className="mt-1 font-display text-xl font-extrabold">{r.route.originName} ({r.route.origin}) → {r.route.destinationName} ({r.route.destination})</h4>
             <p className="text-sm text-[#505d71]">{prettyDate(q.departureDate)}{!q.oneWay && q.returnDate && ` · return ${prettyDate(q.returnDate)}`}</p></div>
           <div className="text-right"><p className="font-display text-2xl font-extrabold">{money(price)}</p><p className="text-[12px] text-[#505d71]">per person{usd(priceUsd)}</p></div>

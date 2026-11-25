@@ -69,7 +69,7 @@ function Page() {
   useEffect(() => {
     if (!ready || new URLSearchParams(window.location.search).get('open') !== 'group-travel') return;
     window.history.replaceState({}, '', '/');
-    if (user) setModal({ kind: 'dashboard', tab: 'Group travel' });
+    if (user) setModal({ kind: 'dashboard', tab: user.role === 'driver' ? 'Overview' : 'Group travel' }); // drivers have no group travel tab
     else { setAfterAuthTab('Group travel'); setModal({ kind: 'auth' }); }
   }, [ready, user]);
   // Back from Paystack checkout: confirm the payment with the server, then show the trip.

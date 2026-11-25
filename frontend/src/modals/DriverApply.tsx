@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { api, type Application, type User } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { button, outline, input, Field, ErrorText, Icon, Spinner } from '../components/ui';
+import { VehiclePicker, emptyVehicle, vehicleBody, type VehicleChoice } from '../components/VehiclePicker';
 
 
 export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
@@ -11,6 +12,7 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<Application | null>(null);
   const details = useRef<Record<string, string>>({});
+  const [vehicle, setVehicle] = useState<VehicleChoice>(emptyVehicle);
 
   if (user && (user.role === 'business' || user.role === 'admin')) {
     return <p className="text-sm leading-7">You're signed in with a {user.role} account. Please sign out and apply with a personal account.</p>;
@@ -32,7 +34,8 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
       setStep(1);
       return;
     }
-    const body = { ...details.current, ...Object.fromEntries(form), consent: !!form.get('consent') };
+    if (!vehicle.type) { setError('Choose the type of vehicle you will drive.'); return; }
+    const body = { ...details.current, ...Object.fromEntries(form), vehicleDetails: vehicleBody(vehicle), consent: !!form.get('consent') };
     setBusy(true);
     try {
       const res = await api<{ application: Application; token: string | null; user: User }>('/drivers/apply', { body });
@@ -59,12 +62,7 @@ export function DriverApply({ onDashboard }: { onDashboard: () => void }) {
         {user && <p className="rounded-lg bg-[#e3eaf2] p-3 text-sm">Applying as <b>{user.name}</b> ({user.email}).</p>}
       </> : <>
         <p className="text-[13px] leading-5 text-[#5b6b82]">Tell us about the vehicle you will drive. You’ll upload your licence, PrDP, registration and insurance in the next step.</p>
-        <Field label="Vehicle make, model & registration"><input name="vehicle" required minLength={3} className={input} placeholder="e.g. Toyota Corolla · CA 123-456" /></Field>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Year"><input name="vehicleYear" type="number" min={2008} max={new Date().getFullYear() + 1} required className={input} placeholder="2019" /></Field>
-          <Field label="Colour"><input name="vehicleColour" className={input} placeholder="White" /></Field>
-          <Field label="Passenger seats"><select name="seats" className={input} defaultValue="4">{[3, 4, 5, 6, 7].map((n) => <option key={n}>{n}</option>)}</select></Field>
-        </div>
+        <VehiclePicker value={vehicle} onChange={setVehicle} />
         <label className="flex items-start gap-3 text-sm leading-6"><input name="consent" required type="checkbox" className="mt-1.5 h-5 w-5 accent-forest" />I confirm these documents are mine and accurate. I understand programme participation is subject to eligibility and does not automatically grant shares or equity.</label>
       </>}
     </div>

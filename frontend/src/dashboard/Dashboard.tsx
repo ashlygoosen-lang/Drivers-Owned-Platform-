@@ -17,6 +17,8 @@ import { FleetMap } from './FleetMap';
 import { DriverPlans } from './Plans';
 import { PlanDashboard } from './PlanDashboard';
 import { PlanOps } from './PlanOps';
+import { DriverVehicle } from './DriverVehicle';
+import { VehicleChanges } from './VehicleChanges';
 import { MyGroupTravel } from '../travel/GroupTravel';
 import { TravelAdmin } from '../travel/TravelAdmin';
 const STAFF = ['admin', 'support', 'finance', 'compliance'];
@@ -293,7 +295,7 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
     switch (tab) {
       case 'Overview': return <>{customer && <VerificationBanner status={user.verificationStatus || 'not_started'} onOpen={() => setTab('Verification')} />}<Overview onAction={action} actionLabel={actionLabel} /></>;
       case 'Verification': return <VerificationCentre notify={onNotice} onDone={() => void refresh()} />;
-      case 'Verification queue': return <VerificationQueue notify={onNotice} />;
+      case 'Verification queue': return <div className="grid gap-6"><VehicleChanges notify={onNotice} /><VerificationQueue notify={onNotice} /></div>;
       case 'Expiring documents': return <ExpiringDocuments notify={onNotice} />;
       case 'Audit log': return <AuditLog />;
       case 'Staff': return <StaffManager notify={onNotice} />;
@@ -309,7 +311,7 @@ export function Dashboard({ onBook, onTrack, onOwnership, onNotice, onSignedOut,
       case 'Profile': case 'Account': return <ProfileForm notify={onNotice} />;
       case 'Support': return <Support notify={onNotice} />;
       case 'Ride requests': return <DriverRequests notify={onNotice} />;
-      case 'Vehicle & application': return <DriverApplication />;
+      case 'Vehicle & application': return <div className="grid gap-8"><DriverVehicle notify={onNotice} approved={user.driverStatus === 'approved'} /><DriverApplication /></div>;
       case 'Ownership': return <div className="text-sm leading-7"><h4 className="mb-3 text-lg font-semibold">Participation, membership & equity</h4><p>As a DROP driver you may apply for the driver-owner programme. Membership and formal equity are distinct: joining or driving does not automatically grant shares. Eligibility, legal structure, voting rights and any equity allocation are set out in formal programme documents and agreements.</p><button onClick={onOwnership} className={`${outline} mt-5`}>View programme overview</button></div>;
       case 'Employees': return <Employees notify={onNotice} />;
       case 'Invoices': return <Invoices />;
