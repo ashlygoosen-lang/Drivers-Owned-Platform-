@@ -203,6 +203,7 @@ const privacy: LegalDoc = {
         ['Devices and security', 'Push-notification tokens, app version, app-integrity results from Google or Apple, sign-in times, hashed IP addresses in security logs', 'Your device and our systems'],
         ['Learners on scholar plans', 'First name, grade, school, home and school addresses, pickup times, notes the parent gives (for example, “asthma pump in bag”), and the live location of their trip', 'The parent or guardian'],
         ['Employees on staff plans', 'Name, optional phone number, pickup point and shift times', 'The employer'],
+        ['Group travellers', 'Full name as on passport or ID, date of birth, nationality, passport number and expiry (encrypted, and decrypted only to produce the passenger manifest for the airline or coach operator of that trip), contact details, ticket numbers, and parent or guardian consent for travellers under 18', 'The person booking'],
       ]} />
       <P>We ask only for what we need. Please do not give us more health information than a driver needs on the day.</P>
     </S>
@@ -482,13 +483,28 @@ const refunds: LegalDoc = {
         'Staff plans on a business account are invoiced only for trips driven, so there is nothing to refund.',
       ]} />
     </S>
-    <S id="how" n="3." title="How refunds are paid">
+    <S id="group" n="3." title="Group travel (flights and coaches)">
+      <P>Your payment is held in a separate account for your group and is only paid to the airline or coach operator once the group is confirmed. The fees below are the defaults; the fees for your route are shown before you pay and in My DROP.</P>
+      <Table head={['When', 'Cancellation fee', 'Refund']} rows={[
+        ['Before you pay (seat hold)', 'None', 'Nothing was charged'],
+        ['Before the group’s fill deadline', 'None', 'Everything you paid'],
+        ['After the fill deadline, before tickets are issued', '50% of what you paid', 'The rest'],
+        ['After tickets are issued', '100%', 'None (the airline or operator has been paid). Airline or operator rules may allow changes; contact support'],
+      ]} />
+      <L items={[
+        'If the group does not reach its minimum by the deadline, or the airline or operator cancels, you get a full refund. On some routes we first offer a free move to another group on the same route; if you decline, or do not choose within 7 days, we refund you in full.',
+        'If you paid a deposit, the balance is due by the date shown in My DROP. If it is still unpaid 48 hours after that date, the booking is cancelled under the fees above.',
+        'Unpaid seat holds expire after 30 minutes and the seats are released.',
+        'You are responsible for valid passports, visas and any consent affidavits required for travellers under 18.',
+      ]} />
+    </S>
+    <S id="how" n="4." title="How refunds are paid">
       <P>Card refunds go back to the card you paid with, through Paystack. We start the refund straight away; your bank usually shows it within 5 to 10 business days. Cash fares are settled with the driver; contact support if you were overcharged.</P>
     </S>
-    <S id="problems" n="4." title="Something went wrong">
+    <S id="problems" n="5." title="Something went wrong">
       <P>If you were charged incorrectly, the service was not provided, or a trip was unsafe, raise a ticket in My DROP within 30 days. If we find that the service was not provided with reasonable care and skill, we will refund you for the affected service (CPA ss 54 and 56 principles).</P>
     </S>
-    <S id="ecta" n="5." title="Cooling-off">
+    <S id="ecta" n="6." title="Cooling-off">
       <P>The seven-day cooling-off right for online transactions (ECTA s 44) does not apply to transport services for a specific date or period, or to services that have started with your consent (ECTA s 42(2)). The more generous rights above apply instead.</P>
     </S>
   </>,
@@ -515,7 +531,10 @@ const fees: LegalDoc = {
     <S id="plans" n="3." title="Monthly plans">
       <P>Each trip on a scholar or staff plan costs the on-demand fare less 15%. The monthly price is the sum of all trips from the start date to the month end, excluding public holidays. Trips that do not run are not charged (see the <A href="/legal/cancellations-refunds">Cancellation and Refund Policy</A>).</P>
     </S>
-    <S id="vat" n="4." title="VAT">
+    <S id="group" n="4." title="Group travel">
+      <P>Group flights and coach trips have a fixed price per person, shown before you book, and charged in South African rand (US dollar amounts are estimates). Children pay the same fare and every traveller, including infants, needs a seat. You can pay in full or pay a deposit (usually 30%) with the balance due by the group’s fill deadline. There is no booking fee.</P>
+    </S>
+    <S id="vat" n="5." title="VAT">
       <P>Amounts include VAT where it applies. VAT registration: {LEGAL.vatNumber}.</P>
     </S>
   </>,
