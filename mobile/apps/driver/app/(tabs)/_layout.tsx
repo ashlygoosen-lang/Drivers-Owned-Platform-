@@ -7,6 +7,7 @@ export default function TabsLayout() {
   if (!user) return <Redirect href="/sign-in" />;
   return <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.orange, tabBarInactiveTintColor: colors.muted, tabBarStyle: { minHeight: 60 }, tabBarLabelStyle: { fontSize: 12, fontWeight: '600' } }}>
     <Tabs.Screen name="index" options={{ title: 'Drive', ...tab('speedometer') }} />
+    <Tabs.Screen name="plans" options={{ title: 'Plans', ...tab('calendar') }} />
     <Tabs.Screen name="wallet" options={{ title: 'Earnings', ...tab('wallet') }} />
     <Tabs.Screen name="trips" options={{ title: 'Trips', ...tab('time') }} />
     <Tabs.Screen name="notifications" options={{ title: 'Inbox', ...tab('notifications') }} />

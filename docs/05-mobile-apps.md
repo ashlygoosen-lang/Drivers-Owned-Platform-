@@ -22,6 +22,8 @@ mobile/
 | Cancel, refund, rate, share trip, SOS 10111 | ✅ | ✅ | release trip |
 | Go online, requests, accept, advance, navigate (Google Maps/Waze) | ✅ | n/a | ✅ with **background GPS** |
 | Wallet, withdrawals, bank account, DROP Driver Card | ✅ | n/a | ✅ |
+| Monthly plans: scholar transport (parents) and staff transport (business): quote, guardian consent, pay, skip days, cancel, renew, follow each trip | ✅ | ✅ School / Staff tab | n/a |
+| Monthly plans for drivers: offers (vetted drivers only for scholar plans), accept the month, learner and handover details, release | ✅ | n/a | ✅ Plans tab |
 | Notifications, support tickets, account deletion | ✅ | ✅ | ✅ |
 | Push notifications (trip updates, messages, ringing calls) | n/a | ✅ | ✅ |
 | Business accounts (employees, invoices), staff dashboards | ✅ | Business can book | website only |

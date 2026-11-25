@@ -16,6 +16,8 @@ function Shell() {
     if (!user) return;
     if ((d.type === 'message' || d.type === 'trips') && d.bookingId) router.push(`/trip/${d.bookingId}`);
     else if (d.type === 'verification') router.push('/verification');
+    else if (d.type === 'plans') router.push('/(tabs)/plans');
+    else if (d.type === 'trip' && d.bookingId) router.push(`/trip/${d.bookingId}`);
   }), [user]);
   if (!ready) return null;
   return <LiveProvider enabled={Boolean(user)}>
@@ -30,6 +32,8 @@ function Shell() {
         <Stack.Screen name="trip/[id]" options={{ title: 'Your trip' }} />
         <Stack.Screen name="verification" options={{ title: 'Verification' }} />
         <Stack.Screen name="support" options={{ title: 'Support' }} />
+        <Stack.Screen name="plan/new" options={{ title: 'New monthly plan' }} />
+        <Stack.Screen name="plan/[id]" options={{ title: 'Monthly plan' }} />
       </Stack>
       <CallScreen />
     </CallsProvider>

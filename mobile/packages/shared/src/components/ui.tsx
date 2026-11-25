@@ -68,6 +68,15 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
   return <View accessibilityRole="tablist" accessibilityLabel={label} style={s.seg}>{options.map((o) => <Pressable key={o} accessibilityRole="tab" accessibilityState={{ selected: o === value }} onPress={() => onChange(o)} style={[s.segItem, o === value && { backgroundColor: colors.navy }]}><Text style={{ fontWeight: '600', color: o === value ? colors.white : colors.muted }}>{o}</Text></Pressable>)}</View>;
 }
 
+/** Wrapping choice chips (single or multiple selection). */
+export function Chips<T extends string | number>({ options, selected, onToggle, label, render }: { options: T[]; selected: T[]; onToggle: (v: T) => void; label: string; render?: (v: T) => string }) {
+  return <View accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), marginVertical: space(2) }}>{options.map((o) => {
+    const on = selected.includes(o);
+    return <Pressable key={String(o)} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => onToggle(o)} style={{ minHeight: 40, paddingHorizontal: space(3), borderRadius: radius.sm, borderWidth: 1, borderColor: on ? colors.navy : colors.line, backgroundColor: on ? colors.navy : colors.white, justifyContent: 'center' }}>
+      <Text style={{ fontWeight: '600', color: on ? colors.white : colors.text }}>{render ? render(o) : String(o)}</Text></Pressable>;
+  })}</View>;
+}
+
 export const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.grey },
   pad: { padding: space(5), paddingBottom: space(12) },

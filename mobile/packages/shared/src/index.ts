@@ -9,6 +9,7 @@ export * from './lib/push';
 export * from './lib/security';
 export * from './lib/geo';
 export * from './lib/secureStore';
+export * from './lib/plans';
 export * from './components/ui';
 export * from './components/TripChat';
 export * from './components/CallScreen';

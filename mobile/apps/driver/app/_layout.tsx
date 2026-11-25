@@ -17,6 +17,8 @@ function Shell() {
     if (!user) return;
     if ((d.type === 'message' || d.type === 'trips') && d.bookingId) router.push("/(tabs)");
     else if (d.type === 'verification') router.push('/verification');
+    else if (d.type === 'plans') router.push('/(tabs)/plans');
+    else if (d.type === 'trip') router.push('/(tabs)'); // a monthly-plan trip is ready in Drive
   }), [user]);
   if (!ready) return null;
   return <LiveProvider enabled={Boolean(user)}>
