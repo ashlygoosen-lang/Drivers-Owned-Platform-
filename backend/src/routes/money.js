@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import express from 'express';
-import { db, id, now, nextRef } from '../db.js';
+import { db, id, now, nextRef, nextNumber } from '../db.js';
 import { requireAuth, requireRole, checkPassword } from '../auth.js';
 import { isDemoUser } from '../demoPolicy.js';
+import { withLock } from '../lock.js';
 
 // SEC-006: changing the payout bank account needs the password, and withdrawals to a changed account
 // wait BANK_CHANGE_HOLD_HOURS, so a stolen session can't redirect a driver's earnings straight away.
@@ -33,14 +34,19 @@ export const BANKS = ['ABSA', 'Capitec', 'Discovery Bank', 'FNB', 'Investec', 'N
 /* ---------------- Passenger payments (Paystack) ---------------- */
 router.get('/payments/config', (_req, res) => res.json({ card: paystack.paystackEnabled(), mode: paystack.paystackMode() }));
 
-async function markPaid(booking, tx) {
+/** Confirm a card payment exactly once, whether the webhook or the passenger's return arrives first (or both, on two servers). */
+async function markPaid(bookingIn, tx) {
+  return withLock(`pay:${bookingIn.id}`, async () => {
+  const booking = db.byId('bookings', bookingIn.id);
   if (booking.paymentStatus === 'paid') return booking;
   const amount = Number(tx.amount);
   if (tx.status !== 'success') throw bad('This payment was not successful.');
   if (amount !== cents(booking.fare) || String(tx.currency).toUpperCase() !== 'ZAR') throw bad('The payment amount does not match this booking. Please contact support.');
   recordCardPayment(booking, { reference: tx.reference, amountCents: amount, provider: 'Paystack' });
   db.insert('payments', { id: id(), bookingId: booking.id, userId: booking.userId, provider: 'Paystack', reference: tx.reference, amount, status: 'paid', channel: tx.channel, cardLast4: tx.authorization?.last4 || '', paidAt: tx.paid_at || now(), createdAt: now() });
-  return db.update('bookings', booking.id, { paymentStatus: 'paid', paymentReference: tx.reference, status: booking.status === 'awaiting_payment' ? 'requested' : booking.status, history: [...booking.history, { status: 'requested', at: now(), note: 'Paid by card' }] });
+  const patch = { paymentStatus: 'paid', paymentReference: tx.reference, ...(booking.status === 'awaiting_payment' && { status: 'requested', history: [...booking.history, { status: 'requested', at: now(), note: 'Paid by card' }] }) };
+  return (await db.updateStrict('bookings', booking.id, patch, { when: { paymentStatus: ['pending', null] } })) || db.byId('bookings', booking.id);
+  });
 }
 
 router.post('/payments/bookings/:id/checkout', requireAuth, wrap(async (req, res) => {
@@ -103,8 +109,7 @@ export async function refundBooking(booking) {
 /* ---------------- Driver wallet ---------------- */
 function walletRef(user) {
   if (user.walletRef) return user.walletRef;
-  db.get().counters.wallet = (db.get().counters.wallet || 0) + 1;
-  const ref = `7${String(db.get().counters.wallet).padStart(10, '0')}`; // 11-digit wallet reference shared with Paymentology
+  const ref = `7${String(nextNumber('wallet')).slice(-10).padStart(10, '0')}`; // 11-digit wallet reference shared with Paymentology
   db.update('users', user.id, { walletRef: ref });
   return ref;
 }
@@ -112,7 +117,7 @@ const maskAcc = (n) => (n ? `•••• ${String(n).slice(-4)}` : '');
 const publicCard = (c) => c && ({ id: c.id, programme: c.programme, maskedNumber: c.maskedNumber, validDate: c.validDate, status: c.status, type: c.type, issuedAt: c.issuedAt, sandbox: c.sandbox, stopReason: c.stopReason || null });
 
 router.get('/wallet', driverOnly, (req, res) => {
-  const u = db.find('users', (x) => x.id === req.user.id);
+  const u = db.byId('users', req.user.id);
   const card = db.all('cards').filter((c) => c.userId === u.id && c.status !== 'retired').pop();
   const spendToday = db.filter('cardEvents', (e) => e.userId === u.id && e.method === 'Deduct' && e.approved && e.createdAt >= new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString()).reduce((s, e) => s + e.amount - (e.reversed || 0), 0);
   const tx = statement(walletAccount(u.id), 100).map((t) => ({ ...t, amount: rands(t.amount) }));
@@ -135,7 +140,7 @@ router.get('/wallet', driverOnly, (req, res) => {
 router.put('/wallet/bank-account', driverOnly, wrap(async (req, res) => {
   const b = req.body || {};
   if (!isDemoUser(req.user) && !(await checkPassword(String(b.currentPassword || ''), req.user.passwordHash))) throw bad('Enter your DROP password to change your bank account.');
-  const previous = db.find('users', (x) => x.id === req.user.id).bankAccount;
+  const previous = db.byId('users', req.user.id).bankAccount;
   const accountNumber = String(b.accountNumber || '').replace(/\s/g, '');
   if (!/^\d{6,16}$/.test(accountNumber)) throw bad('Account numbers contain 6 to 16 digits.');
   const branchCode = String(b.branchCode || '').replace(/\s/g, '');
@@ -152,7 +157,12 @@ router.put('/wallet/bank-account', driverOnly, wrap(async (req, res) => {
 }));
 
 router.post('/wallet/withdrawals', driverOnly, wrap(async (req, res) => {
-  const u = db.find('users', (x) => x.id === req.user.id);
+  // One withdrawal at a time per wallet, across every server, against the latest balance.
+  await withLock(`wallet:${req.user.id}`, () => withdraw(req, res));
+}));
+
+async function withdraw(req, res) {
+  const u = db.byId('users', req.user.id);
   if (u.verificationStatus !== 'verified') throw bad('Your account must be verified before you can withdraw.');
   if (!u.bankAccount) throw bad('Add your bank account first.');
   if (u.bankAccount.holdUntil && Date.parse(u.bankAccount.holdUntil) > Date.now()) throw bad(`For your security, withdrawals to a newly changed bank account start ${new Date(u.bankAccount.holdUntil).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`);
@@ -170,7 +180,7 @@ router.post('/wallet/withdrawals', driverOnly, wrap(async (req, res) => {
     lines: [{ account: walletAccount(u.id), dr: total }, { account: 'payouts_pending', cr: amount }, { account: 'fees', cr: WITHDRAWAL.fee }] });
   const { accountEnc, ...safe } = w;
   res.status(201).json({ withdrawal: { ...safe, amount: rands(amount), fee: rands(w.fee) }, balance: rands(walletBalance(u.id)) });
-}));
+}
 
 /* ---------------- Driver card (Paymentology) ---------------- */
 function myCard(userId) {
@@ -181,7 +191,7 @@ function myCard(userId) {
 
 router.post('/wallet/card', driverOnly, wrap(async (req, res) => {
   if (!cardsEnabled()) throw bad('The DROP card programme is not live yet.');
-  const u = db.find('users', (x) => x.id === req.user.id);
+  const u = db.byId('users', req.user.id);
   if (u.verificationStatus !== 'verified') throw bad('Complete your verification before ordering a DROP card.');
   if (db.find('cards', (c) => c.userId === u.id && ['active', 'frozen', 'stopped'].includes(c.status))) throw bad('You already have a DROP card.');
   const v = getVerification(u.id);
@@ -266,7 +276,7 @@ router.get('/finance/withdrawals.csv', finance, (req, res) => {
 });
 
 router.post('/finance/withdrawals/:id/:action', finance, wrap(async (req, res) => {
-  const w = db.find('withdrawals', (x) => x.id === req.params.id);
+  const w = db.byId('withdrawals', req.params.id);
   if (!w) throw new HttpError(404, 'Withdrawal not found.');
   if (w.status !== 'requested') throw bad(`This withdrawal is already ${w.status}.`);
   const action = oneOf(req.params.action, ['paid', 'reject'], 'Action');
@@ -313,7 +323,7 @@ router.get('/finance/card-transactions', finance, (_req, res) => {
 });
 
 router.post('/finance/cards/:id/stop', finance, wrap(async (req, res) => {
-  const card = db.find('cards', (c) => c.id === req.params.id);
+  const card = db.byId('cards', req.params.id);
   if (!card) throw new HttpError(404, 'Card not found.');
   const r = await pty.stopCard({ reference: card.reference, cardIdentifier: card.cardIdentifier, reasonID: 7, note: str(req.body?.note, 'Note', { optional: true, max: 200 }) || 'Stopped by DROP finance' });
   if (r.resultCode !== 1 && !/not allowed/i.test(r.resultText || '')) throw new HttpError(502, r.resultText || 'Could not stop the card.');

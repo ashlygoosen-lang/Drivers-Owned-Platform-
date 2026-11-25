@@ -7,7 +7,8 @@ import { optionalAuth, requireRole, publicUser } from '../auth.js';
 import { issueSession } from '../sessions.js';
 import { createUser } from './auth.js';
 import { sameWorld } from '../demoPolicy.js';
-import { view, setStatus } from './bookings.js';
+import { view } from './bookings.js';
+import { transition, ACTIVE } from '../bookingState.js';
 import { str, email, phone, password, oneOf, int, wrap, bad, HttpError } from '../validate.js';
 
 const router = Router();
@@ -61,7 +62,7 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
     createdAt: now(),
   });
   db.update('users', user.id, { vehicle, driverStatus: 'pending' });
-  res.status(201).json({ application, token, ...(refreshToken && { refreshToken }), user: publicUser(db.find('users', (u) => u.id === user.id)) });
+  res.status(201).json({ application, token, ...(refreshToken && { refreshToken }), user: publicUser(db.byId('users', user.id)) });
 }));
 
 router.get('/drivers/application', requireRole('driver'), (req, res) => {
@@ -77,7 +78,7 @@ const approved = (req) => {
     err.code = 'verification_required';
     throw err;
   }
-  const fresh = db.find('users', (u) => u.id === req.user.id);
+  const fresh = db.byId('users', req.user.id);
   if (fresh.driverStatus !== 'approved') throw new HttpError(403, 'Your driver account is not active. Please contact DROP support.');
 };
 
@@ -90,10 +91,10 @@ router.post('/drivers/online', requireRole('driver'), wrap(async (req, res) => {
 router.get('/drivers/requests', requireRole('driver'), wrap(async (req, res) => {
   const v = getVerification(req.user.id);
   recompute(v);
-  const me = db.find('users', (u) => u.id === req.user.id);
+  const me = db.byId('users', req.user.id);
   if (me.driverStatus !== 'approved' || !me.online) return res.json({ requests: [], active: null });
   const active = db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status));
-  const passengerOf = (b) => db.find('users', (u) => u.id === b.userId);
+  const passengerOf = (b) => db.byId('users', b.userId);
   const requests = db.filter('bookings', (b) => b.status === 'requested' && sameWorld(me, passengerOf(b))).slice(-20).reverse();
   res.json({ requests: requests.map((b) => view(b, req.user)), active: active ? view(active, req.user) : null });
 }));
@@ -102,24 +103,25 @@ const NEXT = { accepted: 'arriving', arriving: 'in_progress', in_progress: 'comp
 
 router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (req, res) => {
   approved(req);
-  const booking = db.find('bookings', (b) => b.id === req.params.id);
-  if (!booking || booking.status !== 'requested' || !sameWorld(req.user, db.find('users', (u) => u.id === booking.userId))) throw new HttpError(409, 'This request is no longer available.');
+  const booking = await db.findFresh('bookings', (b) => b.id === req.params.id);
+  if (!booking || booking.status !== 'requested' || !sameWorld(req.user, db.byId('users', booking.userId))) throw new HttpError(409, 'This request is no longer available.');
   if (db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status))) {
     throw bad('Finish your current trip before accepting another.');
   }
   if (booking.userId === req.user.id) throw bad('You cannot accept your own booking.');
   const debtLimit = cents(process.env.CASH_DEBT_LIMIT || 300);
   if (booking.payment === 'Cash' && walletBalance(req.user.id) < -debtLimit) throw bad('Your wallet owes more than the cash limit in DROP service fees. Card and business trips will top it up, or contact support.');
-  res.json({ booking: view(setStatus(booking, 'accepted', { driverId: req.user.id }), req.user) });
+  // Decided by the database: only one driver can win, and a driver can hold only one active trip.
+  res.json({ booking: view(await transition(booking, 'accepted', { driverId: req.user.id, acceptedAt: now() }, { from: 'requested', when: { driverId: null } }), req.user) });
 }));
 
 router.post('/drivers/bookings/:id/advance', requireRole('driver'), wrap(async (req, res) => {
-  const booking = db.find('bookings', (b) => b.id === req.params.id && b.driverId === req.user.id);
+  const booking = await db.findFresh('bookings', (b) => b.id === req.params.id && b.driverId === req.user.id);
   if (!booking || !NEXT[booking.status]) throw bad('This trip cannot be updated.');
   const next = NEXT[booking.status];
-  const updated = setStatus(booking, next, next === 'completed' ? { completedAt: now() } : {});
+  const updated = await transition(booking, next, next === 'completed' ? { completedAt: now() } : {}, { from: booking.status, when: { driverId: req.user.id } });
   if (next === 'completed') settleTrip(updated);
-  res.json({ booking: view(db.find('bookings', (b) => b.id === updated.id), req.user) });
+  res.json({ booking: view(db.byId('bookings', updated.id), req.user) });
 }));
 
 export default router;

@@ -12,6 +12,7 @@ import { db, id, now } from '../../db.js';
 import { PTY, checksumValid, terminalId, cardsEnabled } from './config.js';
 import { parseCall, buildResponse, parseKlv } from './xmlrpc.js';
 import { post, walletAccount, walletBalance } from '../ledger.js';
+import { withLock } from '../../lock.js';
 
 /** Remote API result codes (Paymentology "Response and action code mapping"). */
 export const RC = {
@@ -45,7 +46,7 @@ const TYPE_LABEL = { '00': 'Purchase', '01': 'ATM withdrawal', '09': 'Purchase w
 
 function findCard(reference) {
   const card = db.all('cards').filter((c) => c.reference === reference).pop();
-  const user = card ? db.find('users', (u) => u.id === card.userId) : db.find('users', (u) => u.walletRef === reference);
+  const user = card ? db.byId('users', card.userId) : db.find('users', (u) => u.walletRef === reference);
   return { card, user };
 }
 
@@ -178,10 +179,11 @@ export function declineText(code) {
 /** Express router: POST /api/paymentology/remote  (text/xml). Always answers with XML within the timeout. */
 export function remoteRouter() {
   const router = express.Router();
-  router.post('/paymentology/remote', express.text({ type: ['text/xml', 'application/xml', 'text/plain'], limit: '64kb' }), (req, res) => {
+  router.post('/paymentology/remote', express.text({ type: ['text/xml', 'application/xml', 'text/plain'], limit: '64kb' }), async (req, res) => {
     let out;
-    try { out = handleRemote(typeof req.body === 'string' ? req.body : '', req.ip); }
-    catch (err) { console.error('[drop] paymentology remote error', err); out = { response: { resultCode: RC.DO_NOT_HONOUR } }; }
+    // Card authorisations are serialised across servers so two purchases can't both spend the same balance.
+    try { out = await withLock('card-auth', () => handleRemote(typeof req.body === 'string' ? req.body : '', req.ip), { waitMs: 4000 }); }
+    catch (err) { console.error('[drop] paymentology remote error', err.message); out = { response: { resultCode: RC.DO_NOT_HONOUR } }; }
     res.type('text/xml').send(buildResponse(out.response));
   });
   return router;

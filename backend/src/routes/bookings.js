@@ -10,6 +10,7 @@ import { phoneMode } from '../comms/phone.js';
 import { commsOpen, onTripStatus } from './comms.js';
 import { onTrackingStatus, tripPoints } from './tracking.js';
 import { sameWorld } from '../demoPolicy.js';
+import { transition, OPEN } from '../bookingState.js';
 
 const router = Router();
 const SERVICES = Object.keys(CATEGORIES);
@@ -37,8 +38,8 @@ router.post('/fares/estimate', optionalAuth, wrap(async (req, res) => {
  * masked calling (Twilio) neither side ever sees the other's number.
  */
 export function view(b, viewer) {
-  const driver = b.driverId ? db.find('users', (u) => u.id === b.driverId) : null;
-  const passenger = db.find('users', (u) => u.id === b.userId);
+  const driver = b.driverId ? db.byId('users', b.driverId) : null;
+  const passenger = db.byId('users', b.userId);
   const staff = viewer && ['admin', 'support'].includes(viewer.role);
   const share = staff || (phoneMode() === 'direct' && commsOpen(b));
   const out = { ...b };
@@ -79,8 +80,12 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
   if (payment === 'Business account' && req.user.role !== 'business') throw bad('Business account payment is only available to business accounts.');
   if (payment === 'Card' && !paystackEnabled()) throw bad('Card payments are not available yet. Please choose cash.');
 
-  const booking = db.insert('bookings', {
+  const idemKey = req.get('idempotency-key') ? `${req.user.id}:${String(req.get('idempotency-key')).slice(0, 80)}` : null;
+  const openSlot = req.user.role === 'passenger' && !scheduledFor ? req.user.id : null;
+  const booking = await db.insertStrict('bookings', {
     id: id(),
+    idemKey,
+    openSlot,
     ref: nextRef('booking', 'DRP'),
     userId: req.user.id,
     service: trip.service,
@@ -107,6 +112,10 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
     feedback: '',
     history: [{ status: payment === 'Card' ? 'awaiting_payment' : 'requested', at: now() }],
     createdAt: now(),
+  }, {
+    // One open trip per passenger (business accounts book for several travellers; scheduled trips don't count).
+    conflict: (b) => (openSlot && b.openSlot === openSlot && OPEN.includes(b.status)) || (idemKey && b.idemKey === idemKey),
+    message: 'You already have a trip in progress. Finish or cancel it before booking another.',
   });
   await tripPoints(booking); // coordinates for the live map
   res.status(201).json({ booking: view(booking, req.user) });
@@ -119,33 +128,29 @@ router.get('/bookings', requireAuth, (req, res) => {
   res.json({ bookings: mine.slice().reverse().map((b) => view(b, req.user)) });
 });
 
-function load(req) {
-  const booking = db.find('bookings', (b) => b.id === req.params.id || b.ref === req.params.id);
+async function load(req) {
+  const booking = await db.findFresh('bookings', (b) => b.id === req.params.id || b.ref === req.params.id);
   if (!booking) throw new HttpError(404, 'Booking not found.');
   const u = req.user;
   const allowed = u.role === 'admin' || booking.userId === u.id || booking.driverId === u.id
-    || (u.role === 'driver' && booking.status === 'requested' && sameWorld(u, db.find('users', (x) => x.id === booking.userId)));
+    || (u.role === 'driver' && booking.status === 'requested' && sameWorld(u, db.byId('users', booking.userId)));
   if (!allowed) throw new HttpError(404, 'Booking not found.');
   return booking;
 }
 
 router.get('/bookings/:id', requireAuth, wrap(async (req, res) => {
-  res.json({ booking: view(load(req), req.user) });
+  res.json({ booking: view(await load(req), req.user) });
 }));
 
-function setStatus(booking, status, extra = {}) {
-  const updated = db.update('bookings', booking.id, { ...extra, status, history: [...booking.history, { status, at: now() }] });
-  onTrackingStatus(updated);
-  onTripStatus(updated);
-  return updated;
-}
+/** @deprecated use transition() from bookingState.js */
+const setStatus = (booking, status, extra = {}, opts = {}) => transition(booking, status, extra, opts);
 
 router.post('/bookings/:id/cancel', requireAuth, wrap(async (req, res) => {
-  const booking = load(req);
+  const booking = await load(req);
   const isOwner = booking.userId === req.user.id || req.user.role === 'admin';
   if (isOwner) {
     if (!['awaiting_payment', 'requested', 'accepted', 'arriving'].includes(booking.status)) throw bad('This booking can no longer be cancelled.');
-    let cancelled = setStatus(booking, 'cancelled', { cancelReason: str(req.body?.reason, 'Reason', { optional: true, max: 200 }) });
+    let cancelled = await transition(booking, 'cancelled', { cancelReason: str(req.body?.reason, 'Reason', { optional: true, max: 200 }) }, { from: ['awaiting_payment', 'requested', 'accepted', 'arriving'] });
     if (cancelled.paymentStatus === 'paid') {
       const { refundBooking } = await import('./money.js');
       cancelled = await refundBooking(cancelled);
@@ -154,13 +159,13 @@ router.post('/bookings/:id/cancel', requireAuth, wrap(async (req, res) => {
   }
   // A driver releasing an accepted trip puts it back in the queue.
   if (booking.driverId === req.user.id && ['accepted', 'arriving'].includes(booking.status)) {
-    return res.json({ booking: view(setStatus(booking, 'requested', { driverId: null }), req.user) });
+    return res.json({ booking: view(await transition(booking, 'requested', { driverId: null }, { from: ['accepted', 'arriving'], when: { driverId: req.user.id }, note: 'Released by driver' }), req.user) });
   }
   throw bad('This booking can no longer be cancelled.');
 }));
 
 router.post('/bookings/:id/rate', requireAuth, wrap(async (req, res) => {
-  const booking = load(req);
+  const booking = await load(req);
   if (booking.userId !== req.user.id) throw new HttpError(403, 'Only the passenger can rate this trip.');
   if (booking.status !== 'completed') throw bad('You can rate a trip once it is complete.');
   const rating = int(req.body?.rating, 'Rating', { min: 1, max: 5 });

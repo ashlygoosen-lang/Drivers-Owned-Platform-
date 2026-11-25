@@ -5,7 +5,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import multer from 'multer';
 import { PORT, IS_PROD, CORS_ORIGINS, FRONTEND_DIST, COMPANY, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME } from './config.js';
-import { db, id, now } from './db.js';
+import { db, id, now, settings, setSettings, instanceId } from './db.js';
+import { redis } from './kv.js';
 import { hashPassword } from './auth.js';
 import authRoutes from './routes/auth.js';
 import bookingRoutes from './routes/bookings.js';
@@ -23,7 +24,7 @@ import moneyRoutes, { paystackWebhook } from './routes/money.js';
 import { remoteRouter } from './money/paymentology/remote.js';
 
 import { migrateIdNumbers, verifyAuditChain, audit } from './kyc.js';
-import { limiter, botCheck, turnstileOn, maintenance, maintenanceOn } from './edge.js';
+import { limiter, botCheck, turnstileOn, maintenance, maintenanceOn, idempotent } from './edge.js';
 import { requestLogger, reportError, securityEvent } from './monitor.js';
 import { requireRole } from './auth.js';
 
@@ -80,6 +81,7 @@ export function createApp() {
   app.post('/api/verification/documents', limiter('uploads', 60, 15));
   app.post('/api/bookings', limiter('bookings', Number(process.env.RATE_LIMIT_BOOKINGS || 20), 60, { message: 'You’ve made a lot of bookings in the last hour. Please wait a little, or contact support.' }));
   app.post(['/api/auth/login', '/api/auth/register', '/api/auth/password/forgot', '/api/drivers/apply', '/api/enquiries', '/api/bookings'], botCheck());
+  app.post(['/api/bookings', '/api/payments/bookings/:id/checkout', '/api/wallet/withdrawals'], idempotent());
 
   // Mobile apps: genuine-app checks on sign-in, booking, payments and withdrawals (ATTESTATION_MODE).
   app.use(['/api/app/attest'], limiter('attest', 60, 15, { byIp: true }));
@@ -89,18 +91,28 @@ export function createApp() {
   app.get('/api/security/config', (_req, res) => res.json({ turnstileSiteKey: turnstileOn() ? process.env.TURNSTILE_SITE_KEY || null : null, maintenance: maintenanceOn() }));
   // Admin: tamper check of the audit log, recent security events, maintenance switch.
   app.get('/api/admin/security', requireRole('admin'), (_req, res) => {
-    res.json({ audit: verifyAuditChain(), events: db.all('securityEvents').slice(-200).reverse(), maintenance: db.get().settings?.maintenance || { on: false } });
+    res.json({ audit: verifyAuditChain(), events: db.all('securityEvents').slice(-200).reverse(), maintenance: settings().maintenance || { on: false } });
   });
   app.post('/api/admin/maintenance', requireRole('admin'), express.json(), (req, res) => {
     const on = Boolean(req.body?.on);
-    db.get().settings = { ...(db.get().settings || {}), maintenance: { on, message: String(req.body?.message || '').slice(0, 200), by: req.user.email, at: now() } };
-    db.save();
+    setSettings({ maintenance: { on, message: String(req.body?.message || '').slice(0, 200), by: req.user.email, at: now() } });
     audit(req.user, on ? 'maintenance_on' : 'maintenance_off', 'platform', {});
     securityEvent(on ? 'maintenance_on' : 'maintenance_off', { by: req.user.id }, 'high');
-    res.json({ maintenance: db.get().settings.maintenance });
+    res.json({ maintenance: settings().maintenance });
   });
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'drop-api', time: now() }));
+  // Readiness for the load balancer: database and Redis reachable, not shutting down.
+  app.get('/api/ready', async (_req, res) => {
+    if (app.locals.draining) return res.status(503).json({ ready: false, reason: 'shutting down' });
+    try {
+      const store = await db.health();
+      const r = redis();
+      if (process.env.REDIS_URL && !r) throw new Error('redis unavailable');
+      if (r) await r.ping();
+      res.json({ ready: true, store, redis: Boolean(r), instance: instanceId });
+    } catch (err) { res.status(503).json({ ready: false, reason: err.message }); }
+  });
   app.get('/api/company', (_req, res) => res.json(COMPANY));
   app.use('/api/auth', authRoutes);
   app.use('/api', bookingRoutes, driverRoutes, supportRoutes, dashboardRoutes, verificationRoutes, complianceRoutes, commsRoutes, trackingRoutes, accountRoutes, moneyRoutes, adminRoutes);

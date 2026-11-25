@@ -2,8 +2,9 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { JWT_SECRET } from './config.js';
-import { db } from './db.js';
+import { settings } from './db.js';
 import { redis } from './kv.js';
+import * as kv from './kv.js';
 import { HttpError } from './validate.js';
 import { securityEvent } from './monitor.js';
 
@@ -65,7 +66,7 @@ export function botCheck() {
  * MAINTENANCE_MODE=on (or the admin switch) returns 503 to customers while staff can still sign in
  * and work. Payment provider callbacks are always accepted so no payment is lost.
  */
-export const maintenanceOn = () => String(process.env.MAINTENANCE_MODE || '').toLowerCase() === 'on' || Boolean(db.get().settings?.maintenance?.on);
+export const maintenanceOn = () => String(process.env.MAINTENANCE_MODE || '').toLowerCase() === 'on' || Boolean(settings().maintenance?.on);
 const STAFF = ['admin', 'compliance', 'support', 'finance'];
 export function maintenance(req, res, next) {
   if (!maintenanceOn()) return next();
@@ -76,5 +77,34 @@ export function maintenance(req, res, next) {
     if (p && STAFF.includes(p.role)) return next();
   } catch { /* not staff */ }
   res.setHeader('Retry-After', '600');
-  res.status(503).json({ error: db.get().settings?.maintenance?.message || 'DROP is down for a short maintenance break. Please try again in a few minutes.', code: 'maintenance' });
+  res.status(503).json({ error: settings().maintenance?.message || 'DROP is down for a short maintenance break. Please try again in a few minutes.', code: 'maintenance' });
+}
+
+/* ---------------- Idempotency keys (booking, checkout, withdrawals) ----------------
+ * Clients send `Idempotency-Key: <uuid>` per user action. A retry or double tap with the same key
+ * gets the first response back (header Idempotent-Replay: true) instead of a second booking or
+ * withdrawal; a retry while the first is still running gets 409.
+ */
+export function idempotent() {
+  return async (req, res, next) => {
+    const raw = req.get('idempotency-key');
+    if (!raw) return next();
+    if (!/^[\w-]{8,80}$/.test(raw)) return next(new HttpError(400, 'Invalid Idempotency-Key.'));
+    const k = `idem:${keyOf(req)}:${req.method}:${req.originalUrl.split('?')[0]}:${raw}`;
+    const cached = await kv.get(k);
+    if (cached) {
+      const c = JSON.parse(cached);
+      if (c.pending) return next(Object.assign(new HttpError(409, 'This request is still being processed.'), { code: 'in_progress' }));
+      res.set('Idempotent-Replay', 'true');
+      return res.status(c.status).json(c.body);
+    }
+    if (!(await kv.setNx(k, JSON.stringify({ pending: true }), 120))) return next(Object.assign(new HttpError(409, 'This request is still being processed.'), { code: 'in_progress' }));
+    const json = res.json.bind(res);
+    res.json = (body) => {
+      if (res.statusCode < 500 && res.statusCode !== 429) void kv.set(k, JSON.stringify({ status: res.statusCode, body }), 24 * 3600);
+      else void kv.del(k);
+      return json(body);
+    };
+    next();
+  };
 }
