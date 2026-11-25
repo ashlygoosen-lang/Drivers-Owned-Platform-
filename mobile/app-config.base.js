@@ -83,7 +83,11 @@ module.exports = function makeConfig({ app, name, bundleId, icon }) {
       ['@config-plugins/react-native-webrtc', { cameraPermission: 'DROP uses the camera for video calls on your trips.', microphonePermission: 'DROP uses the microphone for calls on your trips.' }],
       ['expo-build-properties', {
         // Release hardening: R8 minify/obfuscate and shrink (Android); Hermes bytecode is the default engine.
-        android: { enableMinifyInReleaseBuilds: true, enableShrinkResourcesInReleaseBuilds: true, usesCleartextTraffic: false },
+        android: {
+          enableMinifyInReleaseBuilds: true, enableShrinkResourcesInReleaseBuilds: true, usesCleartextTraffic: false,
+          // react-native-webrtc (in-app calls) loads its native codecs by reflection: R8 must keep them.
+          extraProguardRules: '-keep class org.webrtc.** { *; }\n-dontwarn org.webrtc.**',
+        },
         ios: {},
       }],
     ],
