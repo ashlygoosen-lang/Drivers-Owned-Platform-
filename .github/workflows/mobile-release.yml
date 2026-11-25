@@ -48,7 +48,6 @@ jobs:
       DROP_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
       DROP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
       DROP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
-      NODE_ENV: production
       CI: '1'
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +63,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install
         working-directory: mobile
-        run: npm ci
+        run: npm ci --include=dev
       - name: Check types and tests
         working-directory: mobile
         run: npm run typecheck && npm test -- --ci
