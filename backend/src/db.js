@@ -29,6 +29,41 @@ const FILE = path.join(DATA_DIR, 'drop-db.json');
 const COLLECTIONS = ['users', 'bookings', 'applications', 'tickets', 'enquiries', 'verifications', 'ledger', 'cards', 'cardEvents', 'withdrawals', 'payments', 'notifications', 'audit', 'messages', 'calls', 'sessions', 'devices', 'passwordResets', 'attestKeys', 'securityEvents', 'settings'];
 const COUNTER_START = { booking: 1000, application: 100, ticket: 100, enquiry: 100, withdrawal: 1000, wallet: 0 };
 
+/*
+ * Hot-data window (Phase 6B-1, PostgreSQL mode only). Each server keeps in memory only what is live
+ * or recent; older finished trips, chat, notifications and calls stay in PostgreSQL and are read with
+ * SQL when someone opens history (see src/history.js), or faulted back in by id (byIdFresh/faultIn).
+ * Nothing is deleted. Records that money jobs still need (unsettled trips, pending refunds) stay hot.
+ * Ledger entries never change, so old ones are summed per account once (ledgerBase) and recent ones
+ * stay in memory: balance = base + recent, exactly. An entry leaving memory moves into the base.
+ */
+export const HOT_DAYS = Math.max(8, Number(process.env.HOT_WINDOW_DAYS || 14)); // ≥ 8: dashboards chart the last 7 days from memory
+export const ARCHIVABLE = ['bookings', 'messages', 'notifications', 'calls', 'ledger'];
+const ledgerBase = new Map(); // account -> raw cents (dr − cr) of ledger entries outside memory
+const hotCutoff = () => new Date(Date.now() - HOT_DAYS * 86_400_000);
+const COLD_SQL = (p) => `(
+  (collection = 'bookings' and updated_at < $${p} and data->>'status' in ('completed','cancelled')
+    and coalesce(data->>'paymentStatus','') <> 'refund_pending'
+    and not (data->>'status' = 'completed' and data->>'settledAt' is null and data->>'driverId' is not null)
+    and not (data->>'status' = 'cancelled' and coalesce(data->>'paymentStatus','') = 'paid'))
+  or (collection in ('messages','notifications') and updated_at < $${p})
+  or (collection = 'calls' and updated_at < $${p} and coalesce(data->>'status','') not in ('ringing','connected'))
+  or (collection = 'ledger' and data->>'createdAt' < $${p + 1}))`;
+function isCold(collection, r, cut) {
+  if (collection === 'ledger') return Date.parse(r.createdAt || 0) < cut;
+  const t = Date.parse(r.updatedAt || r.createdAt || 0);
+  if (!(t < cut)) return false;
+  if (collection === 'bookings') {
+    if (!['completed', 'cancelled'].includes(r.status) || r.paymentStatus === 'refund_pending') return false;
+    if (r.status === 'completed' && !r.settledAt && r.driverId) return false;
+    if (r.status === 'cancelled' && r.paymentStatus === 'paid') return false;
+    return true;
+  }
+  if (collection === 'ledger') return Date.parse(r.createdAt || 0) < cut; // immutable: age only
+  if (collection === 'calls') return !['ringing', 'connected'].includes(r.status);
+  return collection === 'messages' || collection === 'notifications';
+}
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 export const id = () => crypto.randomUUID();
@@ -107,6 +142,15 @@ create unique index if not exists drop_ledger_key on drop_docs ((data->>'key'))
   where collection = 'ledger' and not deleted and data->>'key' is not null;
 -- Fast lookups used by strict money checks.
 create index if not exists drop_ledger_lines on drop_docs using gin ((data->'lines') jsonb_path_ops) where collection = 'ledger';
+-- History reads for records outside the in-memory window.
+create index if not exists drop_docs_user on drop_docs (collection, (data->>'userId'));
+create index if not exists drop_docs_driver on drop_docs ((data->>'driverId')) where collection = 'bookings';
+create index if not exists drop_docs_booking on drop_docs (collection, (data->>'bookingId'));
+create index if not exists drop_docs_ref on drop_docs ((data->>'ref')) where collection = 'bookings';
+create index if not exists drop_docs_payref on drop_docs ((data->>'paymentReference')) where collection = 'bookings';
+create index if not exists drop_docs_pendref on drop_docs ((data->>'pendingPaymentReference')) where collection = 'bookings';
+create index if not exists drop_docs_created on drop_docs (collection, (data->>'createdAt'));
+create index if not exists drop_docs_updated on drop_docs (updated_at);
 `;
 
 async function loadPg(url) {
@@ -127,7 +171,13 @@ async function loadPg(url) {
   // If this database is empty and a JSON data file exists, import it once (migration from the file store).
   const { rows: [{ n }] } = await pool.query('select count(*)::int n from drop_docs');
   if (n === 0 && fs.existsSync(FILE)) { const c = await pool.connect(); try { await c.query('select pg_advisory_lock(727274002)'); const { rows: [{ m: left }] } = await c.query('select count(*)::int m from drop_docs'); if (left === 0) await importFileIntoPg(); } finally { await c.query('select pg_advisory_unlock(727274002)').catch(() => undefined); c.release(); } }
-  const { rows } = await pool.query('select collection, id, data, seq from drop_docs where not deleted order by seq');
+  const cut = hotCutoff();
+  const { rows } = await pool.query(`select collection, id, data, seq from drop_docs where not deleted and not ${COLD_SQL(1)} order by seq`, [cut, cut.toISOString()]);
+  // Same cut-off: every ledger entry is either loaded above or summed here, never both, never neither.
+  const { rows: base } = await pool.query(`select l->>'account' account, sum(coalesce((l->>'dr')::bigint,0) - coalesce((l->>'cr')::bigint,0))::text raw
+    from drop_docs d, jsonb_array_elements(d.data->'lines') l where d.collection = 'ledger' and not d.deleted and d.data->>'createdAt' < $1 group by 1`, [cut.toISOString()]);
+  ledgerBase.clear();
+  for (const b of base) ledgerBase.set(b.account, Number(b.raw));
   const fresh = empty();
   for (const r of rows) { ensure(r.collection); (fresh[r.collection] ||= []).push(r.data); if (BigInt(r.seq) > pg.maxSeq) pg.maxSeq = BigInt(r.seq); }
   for (const c of Object.keys(fresh)) data[c] = fresh[c];
@@ -137,7 +187,8 @@ async function loadPg(url) {
   await Promise.all(Object.keys(COUNTER_START).map((k) => refill(k)));
   await listen();
   setInterval(() => { catchUp().catch(() => undefined); }, 2000).unref();
-  console.log(`[drop] PostgreSQL store ready (${rows.length} records, instance ${instanceId})`);
+  setInterval(() => { const n = db.evictCold(); if (n) console.log(`[drop] moved ${n} records older than ${HOT_DAYS} days out of memory (still in PostgreSQL)`); }, 3_600_000).unref();
+  console.log(`[drop] PostgreSQL store ready (${rows.length} records in memory, ${HOT_DAYS}-day window, instance ${instanceId})`);
 }
 
 async function importFileIntoPg() {
@@ -175,20 +226,46 @@ function applyRow(collection, rid, row, deleted) {
 }
 
 let catching = null;
+/*
+ * Sequence numbers are taken when a write starts, but writes from different servers can commit out of
+ * order: seq 101 may be visible while 100 is still committing. Moving past 100 then would skip it for
+ * good. So every missing number is remembered as a hole and looked up again until it shows up or is
+ * clearly abandoned (rolled back / lost a uniqueness race), after HOLE_TTL_MS.
+ */
+const holes = new Map(); // seq (string) -> first seen ms
+const HOLE_TTL_MS = 15_000;
+let lastHoleCheck = 0;
+const MAX_HOLES = 20_000;
+function applyFeedRow(r, cut) {
+  const key = `${r.collection}\u0000${r.id}`;
+  const s = r.seq.toString();
+  // An old record written elsewhere (import, bulk anonymise) stays out of memory unless we already hold it.
+  const coldElsewhere = !r.deleted && r.data && r.collection !== 'ledger' && ARCHIVABLE.includes(r.collection) && !index.get(r.collection)?.has(r.id) && isCold(r.collection, r.data, cut);
+  // Our own writes are already applied; records with unsaved local changes are newer locally
+  // (their pending write returns the merged row afterwards).
+  if (!coldElsewhere && !ownSeq.has(s) && !pending.has(key) && !inflight.has(key)) applyRow(r.collection, r.id, r.data, r.deleted);
+  ownSeq.delete(s);
+}
 /** Pull every change committed by other instances since the last one we saw. */
 export function catchUp() {
   if (!pg) return Promise.resolve(0);
   catching ||= (async () => {
     let n = 0;
+    const cut = hotCutoff().getTime();
+    const nowMs = Date.now();
+    for (const [h, at] of holes) if (nowMs - at > HOLE_TTL_MS) holes.delete(h);
+    if (holes.size && nowMs - lastHoleCheck > 250) {
+      lastHoleCheck = nowMs;
+      const { rows } = await pg.pool.query('select collection, id, data, deleted, seq from drop_docs where seq = any($1::bigint[]) order by seq', [[...holes.keys()]]);
+      for (const r of rows) { applyFeedRow(r, cut); holes.delete(r.seq.toString()); n++; }
+    }
     for (;;) {
       const { rows } = await pg.pool.query('select collection, id, data, deleted, seq from drop_docs where seq > $1 order by seq limit 1000', [pg.maxSeq.toString()]);
       for (const r of rows) {
-        const key = `${r.collection}\u0000${r.id}`;
-        // Our own writes are already applied; records with unsaved local changes are newer locally
-        // (their pending write returns the merged row afterwards).
-        if (!ownSeq.has(r.seq.toString()) && !pending.has(key) && !inflight.has(key)) applyRow(r.collection, r.id, r.data, r.deleted);
-        ownSeq.delete(r.seq.toString());
-        pg.maxSeq = BigInt(r.seq);
+        const seq = BigInt(r.seq);
+        for (let m = pg.maxSeq + 1n; m < seq && holes.size < MAX_HOLES; m++) holes.set(m.toString(), nowMs);
+        applyFeedRow(r, cut);
+        pg.maxSeq = seq;
         n++;
       }
       if (rows.length < 1000) break;
@@ -287,12 +364,74 @@ export const db = {
   find: (collection, predicate) => { ensure(collection); return data[collection].find(predicate); },
   filter: (collection, predicate) => { ensure(collection); return data[collection].filter(predicate); },
   byId: (collection, rid) => index.get(collection)?.get(rid),
-  /** byId that catches up with other servers on a miss (read-after-write across instances). */
+  /** byId that catches up with other servers on a miss, then looks outside the memory window. */
   async byIdFresh(collection, recordId) {
     const hit = this.byId(collection, recordId);
     if (hit || !pg || typeof recordId !== 'string') return hit;
     await catchUp();
-    return this.byId(collection, recordId);
+    return this.byId(collection, recordId) || this.faultIn(collection, 'id', recordId);
+  },
+  /**
+   * Find one record by a field, loading it from PostgreSQL into memory if it is outside the window
+   * (an old trip being rated, a late payment webhook). Returns the live in-memory record, so
+   * db.update works on it; once touched it stays hot for another window.
+   */
+  async faultIn(collection, field, value) {
+    ensure(collection);
+    if (value == null || value === '') return undefined;
+    if (collection === 'ledger') return data.ledger.find((r) => r[field] === value); // never load old entries back: they are in ledgerBase
+    const mem = field === 'id' ? index.get(collection).get(value) : data[collection].find((r) => r[field] === value);
+    if (mem || !pg) return mem;
+    const { rows } = await pg.pool.query(field === 'id'
+      ? 'select id, data from drop_docs where collection = $1 and id = $2 and not deleted'
+      : 'select id, data from drop_docs where collection = $1 and data->>$2 = $3 and not deleted limit 1', field === 'id' ? [collection, value] : [collection, field, String(value)]);
+    if (!rows.length) return undefined;
+    const existing = index.get(collection).get(rows[0].id);
+    if (existing) return existing;
+    data[collection].push(rows[0].data); index.get(collection).set(rows[0].id, rows[0].data);
+    return rows[0].data;
+  },
+  /** Read-only SQL for history and reports (PostgreSQL mode). Queued writes are flushed first. */
+  async sql(text, params = []) {
+    if (!pg) throw new Error('db.sql needs PostgreSQL');
+    await this.flush();
+    return (await pg.pool.query(text, params)).rows;
+  },
+  /**
+   * Apply a patch to every matching record, including those outside the memory window
+   * (e.g. anonymising a deleted user's messages). Memory copies get the same patch.
+   */
+  async patchWhere(collection, field, value, patch) {
+    const changes = (x) => Object.entries(patch).some(([k, v]) => x[k] !== v);
+    for (const r of this.filter(collection, (x) => x[field] === value && changes(x))) this.update(collection, r.id, patch);
+    if (!pg) return;
+    await this.flush();
+    const { rows } = await pg.pool.query(`update drop_docs set data = data || $4::jsonb, seq = nextval('drop_seq'), updated_at = now()
+      where collection = $1 and data->>$2 = $3 and not deleted and not (data @> $5::jsonb) returning seq`, [collection, field, String(value), JSON.stringify({ ...patch, updatedAt: now() }), JSON.stringify(patch)]);
+    for (const r of rows) ownSeq.add(r.seq.toString());
+    void pg.pool.query(`notify drop_changes, '${instanceId}'`).catch(() => undefined);
+  },
+  /** Drop cold records from memory (never from PostgreSQL). Runs hourly on every server. */
+  evictCold() {
+    if (!pg) return 0;
+    const cut = hotCutoff().getTime();
+    let n = 0;
+    for (const c of ARCHIVABLE) {
+      const list = data[c];
+      if (!list) continue;
+      let w = 0;
+      for (let i = 0; i < list.length; i++) {
+        const r = list[i];
+        const key = `${c}\u0000${r.id}`;
+        if (isCold(c, r, cut) && !pending.has(key) && !inflight.has(key)) {
+          if (c === 'ledger') for (const l of r.lines || []) ledgerBase.set(l.account, (ledgerBase.get(l.account) || 0) + (l.dr || 0) - (l.cr || 0));
+          index.get(c).delete(r.id); n++;
+        }
+        else list[w++] = r;
+      }
+      list.length = w;
+    }
+    return n;
   },
   /** Like find, but if nothing matches, first pull other servers' latest writes (read-after-write across instances). */
   async findFresh(collection, predicate) {
@@ -409,11 +548,13 @@ export const db = {
 
   onChange(collection, fn) { if (!listeners.has(collection)) listeners.set(collection, new Set()); listeners.get(collection).add(fn); },
   usingPostgres: usingPg,
+  /** Per-account raw totals (cents, dr − cr) of ledger entries not held in memory. */
+  ledgerBase: () => ledgerBase,
   async health() {
     if (!pg) return { store: 'file', ok: true };
     const t = Date.now();
     await pg.pool.query('select 1');
-    return { store: 'postgres', ok: true, ms: Date.now() - t, pending: pending.size, pool: { total: pg.pool.totalCount, idle: pg.pool.idleCount, waiting: pg.pool.waitingCount } };
+    return { store: 'postgres', ok: true, ms: Date.now() - t, pending: pending.size, hotDays: HOT_DAYS, feedHoles: holes.size, inMemory: Object.fromEntries(ARCHIVABLE.map((c) => [c, data[c]?.length || 0])), heapMb: Math.round(process.memoryUsage().heapUsed / 1048576), pool: { total: pg.pool.totalCount, idle: pg.pool.idleCount, waiting: pg.pool.waitingCount } };
   },
   async close() { await this.flush(); if (pg) { await pg.listenClient?.end().catch(() => undefined); await pg.pool.end(); } },
 };

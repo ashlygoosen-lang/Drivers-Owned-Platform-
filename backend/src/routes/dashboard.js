@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { balance, walletBalance, rands } from '../money/ledger.js';
+import { wrap } from '../validate.js';
+import { tripTotals, tripsByMonth, platformTotals } from '../history.js';
 
 const router = Router();
 const DAY = 86_400_000;
@@ -24,30 +26,25 @@ function week(list, dateKey = 'createdAt', valueKey = null) {
   });
 }
 
-function monthlyInvoices(list) {
-  const groups = {};
-  for (const b of list) {
-    const key = (b.completedAt || b.createdAt).slice(0, 7);
-    groups[key] ||= { period: key, trips: 0, total: 0 };
-    groups[key].trips += 1;
-    groups[key].total = Math.round((groups[key].total + b.fare) * 100) / 100;
-  }
-  return Object.values(groups).sort((a, b) => b.period.localeCompare(a.period))
-    .map((g) => ({ ...g, ref: `INV-${g.period.replace('-', '')}`, status: g.period === new Date().toISOString().slice(0, 7) ? 'Open' : 'Issued' }));
+/** Monthly statements for a business account (all time, from PostgreSQL when it is on). */
+async function monthlyInvoices(userId) {
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  return (await tripsByMonth({ userId })).map((g) => ({ ...g, ref: `INV-${g.period.replace('-', '')}`, status: g.period === thisMonth ? 'Open' : 'Issued' }));
 }
 
-router.get('/dashboard', requireAuth, (req, res) => {
+// Totals come from history.js (whole history); 7-day charts from memory, which always holds the last 7+ days.
+router.get('/dashboard', requireAuth, wrap(async (req, res) => {
   const u = req.user;
   if (u.role === 'driver') {
-    const trips = db.filter('bookings', (b) => b.driverId === u.id);
-    const done = trips.filter((b) => b.status === 'completed');
+    const done = db.filter('bookings', (b) => b.driverId === u.id && b.status === 'completed');
+    const t = await tripTotals({ driverId: u.id });
     return res.json({
       stats: [
-        { label: 'Gross fares', value: sum(done, 'fare'), money: true },
-        { label: 'DROP service fees', value: sum(done, 'driverServiceFee'), money: true },
-        { label: 'Your earnings', value: sum(done, 'driverEarnings'), money: true },
+        { label: 'Gross fares', value: t.fare, money: true },
+        { label: 'DROP service fees', value: t.fee, money: true },
+        { label: 'Your earnings', value: t.earnings, money: true },
         { label: 'Wallet balance', value: rands(walletBalance(u.id)), money: true },
-        { label: 'Completed trips', value: done.length },
+        { label: 'Completed trips', value: t.completed },
       ],
       chart: { title: 'Earnings · last 7 days', money: true, data: week(done, 'completedAt', 'driverEarnings') },
       driverStatus: u.driverStatus,
@@ -58,16 +55,16 @@ router.get('/dashboard', requireAuth, (req, res) => {
   }
   if (u.role === 'business') {
     const trips = db.filter('bookings', (b) => b.userId === u.id);
-    const done = trips.filter((b) => b.status === 'completed');
+    const t = await tripTotals({ userId: u.id });
     return res.json({
       stats: [
-        { label: 'Company trips', value: trips.filter((b) => b.status !== 'cancelled').length },
-        { label: 'Spend to date', value: sum(done, 'fare'), money: true },
+        { label: 'Company trips', value: t.notCancelled },
+        { label: 'Spend to date', value: t.fare, money: true },
         { label: 'Team members', value: (u.employees || []).length },
         { label: 'Passenger commission', value: 0, money: true },
       ],
       chart: { title: 'Trips · last 7 days', data: week(trips) },
-      invoices: monthlyInvoices(done),
+      invoices: await monthlyInvoices(u.id),
     });
   }
   if (u.role === 'compliance') {
@@ -119,13 +116,13 @@ router.get('/dashboard', requireAuth, (req, res) => {
   }
   if (u.role === 'admin') {
     const all = db.all('bookings');
-    const done = all.filter((b) => b.status === 'completed');
+    const t = await platformTotals();
     return res.json({
       stats: [
         { label: 'Passengers', value: db.filter('users', (x) => x.role === 'passenger').length },
         { label: 'Active drivers', value: db.filter('users', (x) => x.role === 'driver' && x.driverStatus === 'approved').length },
-        { label: 'Bookings', value: all.length },
-        { label: 'Service fee revenue', value: sum(done, 'driverServiceFee'), money: true },
+        { label: 'Bookings', value: t.total },
+        { label: 'Service fee revenue', value: t.fee, money: true },
         { label: 'Pending applications', value: db.filter('applications', (a) => ['submitted', 'under_review'].includes(a.status)).length },
         { label: 'Open tickets', value: db.filter('tickets', (t) => t.status !== 'resolved').length },
         { label: 'Verifications awaiting review', value: db.filter('verifications', (v) => v.status === 'submitted').length },
@@ -136,26 +133,27 @@ router.get('/dashboard', requireAuth, (req, res) => {
     });
   }
   const trips = db.filter('bookings', (b) => b.userId === u.id);
+  const t = await tripTotals({ userId: u.id });
   return res.json({
     stats: [
-      { label: 'Trips taken', value: trips.filter((b) => b.status === 'completed').length },
+      { label: 'Trips taken', value: t.completed },
       { label: 'Active bookings', value: trips.filter((b) => ['requested', 'accepted', 'arriving', 'in_progress'].includes(b.status)).length },
-      { label: 'Spent with DROP', value: sum(trips.filter((b) => b.status === 'completed'), 'fare'), money: true },
+      { label: 'Spent with DROP', value: t.fare, money: true },
       { label: 'Platform commission paid', value: 0, money: true },
     ],
     chart: { title: 'Trips · last 7 days', data: week(trips) },
   });
-});
+}));
 
 // Public numbers for the homepage counters (live from the database).
-router.get('/stats/public', (_req, res) => {
-  const done = db.filter('bookings', (b) => b.status === 'completed');
+router.get('/stats/public', wrap(async (_req, res) => {
+  const t = await platformTotals();
   res.json({
     drivers: db.filter('users', (u) => u.role === 'driver' && u.driverStatus === 'approved').length,
     applications: db.all('applications').length,
-    trips: done.length,
-    driverEarnings: sum(done, 'driverEarnings'),
+    trips: t.completed,
+    driverEarnings: t.earnings,
   });
-});
+}));
 
 export default router;

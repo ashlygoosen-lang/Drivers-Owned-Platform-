@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as history from '../history.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, now } from '../db.js';
@@ -96,10 +97,11 @@ router.get('/admin/files/:name', (req, res) => {
   res.sendFile(file);
 });
 
-router.get('/admin/bookings', (req, res) => {
-  const status = req.query.status;
-  res.json({ bookings: page(db.filter('bookings', (b) => !status || b.status === status), req).map((b) => view(b, req.user)) });
-});
+router.get('/admin/bookings', wrap(async (req, res) => {
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const list = await history.list('bookings', { status }, { limit: req.query.limit, offset: req.query.offset, q: req.query.q });
+  res.json({ bookings: list.map((b) => view(b, req.user)) });
+}));
 
 router.get('/admin/tickets', (req, res) => {
   const tickets = page(db.all('tickets'), req).map((t) => {

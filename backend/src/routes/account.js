@@ -93,8 +93,9 @@ router.post('/auth/delete-account', requireAuth, wrap(async (req, res) => {
   });
   const v = db.find('verifications', (x) => x.userId === u.id);
   if (v) db.update('verifications', v.id, { closedAt: now(), retainUntil, profile: { ...v.profile, addressLine1: '', addressLine2: '', suburb: '', emergencyName: '', emergencyPhone: '' } });
-  for (const m of db.filter('messages', (x) => x.senderId === u.id)) db.update('messages', m.id, { senderName: 'Deleted user' });
-  for (const n of db.filter('notifications', (x) => x.userId === u.id)) db.update('notifications', n.id, { body: '' });
+  // Includes records outside the in-memory window (PostgreSQL), so nothing old keeps the name.
+  await db.patchWhere('messages', 'senderId', u.id, { senderName: 'Deleted user' });
+  await db.patchWhere('notifications', 'userId', u.id, { body: '' });
   for (const s of db.filter('sessions', (x) => x.userId === u.id && !x.revokedAt)) revokeFamily(s.family, 'account_deleted');
   removeUserDevices(u.id);
   audit(u, 'account_deleted', u.id, { retainUntil });

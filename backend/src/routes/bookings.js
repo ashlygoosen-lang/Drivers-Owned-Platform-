@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as history from '../history.js';
 import { invalidate as invalidateDispatch } from '../dispatch.js';
 import { db, id, now, nextRef } from '../db.js';
 import { requireAuth, optionalAuth } from '../auth.js';
@@ -123,12 +124,12 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
   res.status(201).json({ booking: view(booking, req.user) });
 }));
 
-router.get('/bookings', requireAuth, (req, res) => {
-  const mine = req.user.role === 'driver'
-    ? db.filter('bookings', (b) => b.driverId === req.user.id)
-    : db.filter('bookings', (b) => b.userId === req.user.id);
-  res.json({ bookings: mine.slice().reverse().map((b) => view(b, req.user)) });
-});
+// Trip history, newest first, including trips older than the in-memory window (?limit, ?offset).
+router.get('/bookings', requireAuth, wrap(async (req, res) => {
+  const where = req.user.role === 'driver' ? { driverId: req.user.id } : { userId: req.user.id };
+  const mine = await history.list('bookings', where, { limit: req.query.limit, offset: req.query.offset });
+  res.json({ bookings: mine.map((b) => view(b, req.user)) });
+}));
 
 async function load(req) {
   const booking = await db.byIdFresh('bookings', req.params.id);
@@ -173,9 +174,7 @@ router.post('/bookings/:id/rate', requireAuth, wrap(async (req, res) => {
   const rating = int(req.body?.rating, 'Rating', { min: 1, max: 5 });
   const updated = db.update('bookings', booking.id, { rating, feedback: str(req.body?.feedback, 'Feedback', { optional: true, max: 600 }) });
   if (booking.driverId) {
-    const rated = db.filter('bookings', (b) => b.driverId === booking.driverId && b.rating);
-    const avg = rated.reduce((s, b) => s + b.rating, 0) / rated.length;
-    db.update('users', booking.driverId, { rating: Math.round(avg * 10) / 10 });
+    db.update('users', booking.driverId, { rating: await history.driverRating(booking.driverId) });
   }
   res.json({ booking: view(updated, req.user) });
 }));

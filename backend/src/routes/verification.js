@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as history from '../history.js';
 import multer from 'multer';
 import { db, id, now } from '../db.js';
 import { requireAuth, requireRole } from '../auth.js';
@@ -179,15 +180,15 @@ router.post('/verification/submit', requireAuth, wrap(async (req, res) => {
 }));
 
 /* ---------------- Notifications ---------------- */
-router.get('/notifications', requireAuth, (req, res) => {
-  const list = db.filter('notifications', (n) => n.userId === req.user.id).slice(-50).reverse();
+router.get('/notifications', requireAuth, wrap(async (req, res) => {
+  const list = await history.list('notifications', { userId: req.user.id }, { limit: 50 });
   res.json({ notifications: list, unread: list.filter((n) => !n.read).length });
-});
+}));
 
-router.post('/notifications/read', requireAuth, (req, res) => {
-  for (const n of db.filter('notifications', (x) => x.userId === req.user.id && !x.read)) db.update('notifications', n.id, { read: true });
+router.post('/notifications/read', requireAuth, wrap(async (req, res) => {
+  await db.patchWhere('notifications', 'userId', req.user.id, { read: true });
   res.json({ ok: true });
-});
+}));
 
 export { requireRole };
 export default router;

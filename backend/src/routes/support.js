@@ -12,7 +12,8 @@ export const ENQUIRY_TOPICS = ['General enquiry', 'Business solutions', 'Driver 
 router.post('/support/tickets', requireAuth, wrap(async (req, res) => {
   const b = req.body || {};
   let bookingRef = str(b.bookingRef, 'Booking reference', { optional: true, max: 20 });
-  if (bookingRef && !db.find('bookings', (x) => x.ref === bookingRef && (x.userId === req.user.id || x.driverId === req.user.id))) {
+  const refTrip = bookingRef ? await db.faultIn('bookings', 'ref', bookingRef) : null;
+  if (bookingRef && !(refTrip && (refTrip.userId === req.user.id || refTrip.driverId === req.user.id))) {
     throw bad('We could not find that booking reference on your account.');
   }
   const type = oneOf(b.type || 'Trip help', TICKET_TYPES, 'Issue type');
