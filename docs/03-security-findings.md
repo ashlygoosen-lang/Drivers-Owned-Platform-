@@ -9,19 +9,19 @@ Every **Fixed** item has an automated test in `backend/test/security.test.js` (1
 | SEC-001 | **Critical** | Demo staff logins expose real customer data on a live site | Fixed |
 | SEC-002 | High | Sessions can't be revoked (7-day tokens survive logout, password change, role change) | Fixed (refresh tokens → SEC-017) |
 | SEC-003 | High | No multi-factor authentication for staff | Fixed |
-| SEC-004 | High | Credential stuffing: no per-account lockout, breached passwords accepted, timing leak | Fixed (bot check → Phase 4) |
+| SEC-004 | High | Credential stuffing: no per-account lockout, breached passwords accepted, timing leak | Fixed (Turnstile built in Phase 4; needs keys) |
 | SEC-005 | High | End-of-life upload library (multer 1.x) with denial-of-service bugs | Fixed |
 | SEC-006 | High | A stolen session can redirect a driver's payouts instantly | Fixed |
-| SEC-014 | High | No backups; the whole database is one file on one volume | Needs owner decision |
+| SEC-014 | High | No backups; the whole database is one file on one volume | Backups built (Phase 4); needs BACKUP_KEY and a bucket. Postgres in Phase 6 |
 | SEC-007 | Medium | User objects leak secret fields (encrypted bank number, later MFA secret) | Fixed |
-| SEC-008 | Medium | SA ID / passport numbers stored in plain text at rest | Open (next) |
+| SEC-008 | Medium | SA ID / passport numbers stored in plain text at rest | Fixed (Phase 4) |
 | SEC-009 | Medium | No idempotency on booking creation (a double tap makes two bookings) | Open (Phase 6) |
 | SEC-011 | Medium | No self-service password reset | Needs owner decision |
-| SEC-012 | Medium | Rate limits are in memory, per instance | Open (Phase 4) |
-| SEC-013 | Medium | Audit log is not tamper-evident | Open (Phase 4) |
+| SEC-012 | Medium | Rate limits are in memory, per instance | Fixed (Phase 4; Redis when REDIS_URL is set) |
+| SEC-013 | Medium | Audit log is not tamper-evident | Fixed (Phase 4) |
 | SEC-016 | Medium | "Direct" phone mode shares real phone numbers during a trip | Needs owner decision |
-| SEC-017 | Medium | Session token in `localStorage`; no refresh-token rotation | Open (Phase 4) |
-| SEC-019 | Medium | No security checks in CI (SAST, secrets, dependency, DAST) | Open (Phase 4) |
+| SEC-017 | Medium | Session token in `localStorage`; no refresh-token rotation | Fixed (Phase 4) |
+| SEC-019 | Medium | No security checks in CI (SAST, secrets, dependency, DAST) | Fixed (Phase 4); turn on branch protection to enforce |
 | SEC-021 | Medium | Driver GPS can be spoofed by a modified client | Open (Phase 5) |
 | SEC-022 | Medium | Google Maps browser key must be referrer-restricted | Needs owner action |
 | SEC-010 | Low | Sequential booking refs accepted in place of UUIDs | Open |
@@ -151,7 +151,7 @@ Severity: Medium (POPIA special personal information; there is no network exposu
 Location: verifications.profile.idNumber in drop-db.json
 Fix (planned next): store it AES-256-GCM encrypted, plus an HMAC for the duplicate-ID check and a
   masked copy for display. Migrate existing records on start-up.
-Status: Open. Scheduled first in Phase 4.
+Status: Fixed in Phase 4. IDs are stored encrypted with an HMAC for duplicate checks and a masked copy for display, and old records are migrated on start-up. Test: defence.test.js "SEC-008 …".
 ```
 
 ```
