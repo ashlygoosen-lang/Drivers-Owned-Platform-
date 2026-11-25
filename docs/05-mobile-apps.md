@@ -73,6 +73,6 @@ Point the app at staging with `DROP_API_URL` (set in `eas.json` per profile).
    - **Push notifications:** upload the FCM V1 service-account key and an APNs key to Expo (`eas credentials`). Optionally set `EXPO_ACCESS_TOKEN` on the server.
    - **Certificate pinning:** `DROP_API_PINS="<current SPKI sha256>,<backup SPKI sha256>"`. Generate the pins with `openssl s_client -connect drop.co.za:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64`, and keep the backup key offline.
    - **App links:** `ANDROID_CERT_SHA256` (Play App Signing SHA-256) on the server.
-4. **Build and submit:** `eas build --profile production --platform all`, then `eas submit`.
+4. **Build and submit:** run **Actions → Mobile release builds** on GitHub (Android APK + AAB for both apps; iOS through Expo). Step by step: [09-mobile-release.md](09-mobile-release.md).
 5. **Integrity rollout:** run with `ATTESTATION_MODE=report` for two weeks after launch, check Admin → Security for `app_integrity_failed`, then switch to `enforce`.
 6. **Store listing:** see [store-submission.md](mobile/store-submission.md).
