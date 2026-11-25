@@ -1,3 +1,4 @@
+import { imageFor } from '../vehicles.js';
 import { Router } from 'express';
 import * as history from '../history.js';
 import { invalidate as invalidateDispatch } from '../dispatch.js';
@@ -45,7 +46,7 @@ export function view(b, viewer) {
   const staff = viewer && ['admin', 'support'].includes(viewer.role);
   const share = staff || (phoneMode() === 'direct' && commsOpen(b));
   const out = { ...b };
-  out.driver = driver ? { name: driver.name, phone: share ? driver.phone : '', vehicle: driver.vehicle || '', rating: driver.rating || null } : null;
+  out.driver = driver ? { name: driver.name, phone: share ? driver.phone : '', vehicle: driver.vehicle || '', vehicleType: imageFor(driver, b), rating: driver.rating || null } : null;
   if (viewer && (viewer.role === 'driver' || viewer.role === 'admin' || viewer.role === 'support')) {
     out.passenger = passenger ? { name: b.passengerName || passenger.name, phone: share ? passenger.phone : '' } : null;
   }
@@ -74,7 +75,7 @@ router.post('/bookings', requireAuth, wrap(async (req, res) => {
   const trip = tripInput(b);
   const q = quote(trip);
   const option = q.options.find((o) => o.category === trip.category);
-  if (!option) throw bad('Please choose a vehicle or parcel category.');
+  if (!option || option.plansOnly) throw bad('Please choose a vehicle or parcel category.');
   const scheduledFor = b.scheduledFor ? new Date(b.scheduledFor) : null;
   if (scheduledFor && (Number.isNaN(+scheduledFor) || scheduledFor < Date.now() - 5 * 60_000)) throw bad('Please choose a time in the future.');
   const preferred = req.user.paymentPreference === 'Card' && !paystackEnabled() ? 'Cash' : req.user.paymentPreference;

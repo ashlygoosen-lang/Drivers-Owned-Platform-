@@ -1,3 +1,4 @@
+import { canTake } from './vehicles.js';
 import { db } from './db.js';
 import { allLocations } from './tracking/locations.js';
 import { distanceKm, locate } from './tracking/geo.js';
@@ -111,6 +112,7 @@ async function build() {
       for (const d of grid.get(`${ci + di}:${cj + dj}`) || []) {
         if (!sameWorld(d.user, passenger) || (offers.get(d.id)?.length || 0) >= c.perDriver) continue;
         if (b.requiresScholarVetting && !vetted(d.id)) continue;
+        if (!canTake(d.user, b)) continue; // the vehicle must be allowed for this category
         const km = distanceKm(p, d);
         if (km <= radius) found.push({ id: d.id, km });
       }
@@ -147,6 +149,7 @@ export async function requestsFor(driver, location) {
     const fresh = db.byId('bookings', b.id);
     if (!fresh || fresh.status !== 'requested' || !sameWorld(driver, db.byId('users', fresh.userId))) continue;
     if (fresh.requiresScholarVetting && !scholarEligibility(driver.id).eligible) continue; // learners: vetted drivers only
+    if (!canTake(driver, fresh)) continue;
     if (mine.has(b.id) || p.everyone.has(b.id) || (!located && p.unlocated.has(b.id))) {
       const km = mine.get(b.id) ?? (located && fresh.pickupLoc ? Math.round(distanceKm(location, fresh.pickupLoc) * 10) / 10 : null);
       out.push({ booking: fresh, km });

@@ -99,6 +99,27 @@ router.post('/compliance/verifications/:userId/decision', staff, wrap(async (req
 }));
 
 /** Approved documents expiring within the next N days (default 30), and already expired ones. */
+/** Vehicle changes from approved drivers, waiting for a check of the new vehicle's papers. */
+router.get('/compliance/vehicles', staff, (_req, res) => {
+  res.json({ pending: db.filter('users', (u) => u.role === 'driver' && u.pendingVehicle).map((u) => ({ userId: u.id, name: u.name, email: u.email, current: u.vehicleProfile || null, currentLabel: u.vehicle || '', pending: u.pendingVehicle })) });
+});
+router.post('/compliance/vehicles/:userId/decision', staff, wrap(async (req, res) => {
+  const u = db.find('users', (x) => x.id === req.params.userId && x.role === 'driver' && x.pendingVehicle);
+  if (!u) throw new HttpError(404, 'No vehicle change waiting for this driver.');
+  const decision = oneOf(req.body?.decision, ['approve', 'reject'], 'Decision');
+  const { submittedAt, ...p } = u.pendingVehicle; // eslint-disable-line no-unused-vars
+  if (decision === 'approve') {
+    db.update('users', u.id, { vehicleProfile: p, vehicle: `${p.make} ${p.model} · ${p.colour} · ${p.plate}`, pendingVehicle: null });
+    notify(u.id, 'New vehicle approved', `Your ${p.make} ${p.model} (${p.plate}) is approved. You’ll now get trips it qualifies for.`);
+  } else {
+    const reason = str(req.body?.reason, 'Reason', { min: 3, max: 300 });
+    db.update('users', u.id, { pendingVehicle: null });
+    notify(u.id, 'Vehicle change not approved', reason);
+  }
+  audit(req.user, `vehicle_change_${decision}d`, u.id, { vehicle: `${p.make} ${p.model} ${p.plate}` });
+  res.json({ ok: true });
+}));
+
 router.get('/compliance/expiring', staff, (req, res) => {
   const days = Math.min(Number(req.query.days) || 30, 365);
   const limit = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);

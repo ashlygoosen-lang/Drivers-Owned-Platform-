@@ -1,3 +1,4 @@
+import { imageFor } from '../vehicles.js';
 import { Router } from 'express';
 import { db, now } from '../db.js';
 import { requireAuth, requireRole } from '../auth.js';
@@ -180,7 +181,7 @@ router.get('/bookings/:id/tracking', requireAuth, wrap(async (req, res) => {
     bookingId: b.id, ref: b.ref, status: b.status, stage,
     pickup: pts.pickup && { ...pts.pickup, label: b.pickup },
     destination: pts.destination && { ...pts.destination, label: b.destination },
-    driver: live && { ...live, stale: Date.now() - Date.parse(live.at) > STALE_MS, name: driver.name.split(' ')[0], vehicle: driver.vehicle || '' },
+    driver: live && { ...live, stale: Date.now() - Date.parse(live.at) > STALE_MS, name: driver.name.split(' ')[0], vehicle: driver.vehicle || '', vehicleType: imageFor(driver, b) },
     passenger: (side === 'driver' || FLEET_ROLES.includes(u.role)) ? await getSpot(b.id) : null,
     eta, route,
     // The route actually driven: for staff, and for both parties once the trip is over.
@@ -197,7 +198,7 @@ router.get('/admin/fleet', requireRole(...FLEET_ROLES), wrap(async (_req, res) =
     .map((u) => {
       u = { ...u, location: locs.get(u.id) };
       const trip = db.find('bookings', (b) => b.driverId === u.id && ACTIVE.includes(b.status));
-      return { id: u.id, name: u.name, vehicle: u.vehicle || '', rating: u.rating || null, ...u.location, stale: Date.now() - Date.parse(u.location.at) > STALE_MS, state: trip ? 'on_trip' : 'available', trip: trip ? { id: trip.id, ref: trip.ref, status: trip.status, pickup: trip.pickup, destination: trip.destination } : null };
+      return { id: u.id, name: u.name, vehicle: u.vehicle || '', vehicleType: imageFor(u, trip), rating: u.rating || null, ...u.location, stale: Date.now() - Date.parse(u.location.at) > STALE_MS, state: trip ? 'on_trip' : 'available', trip: trip ? { id: trip.id, ref: trip.ref, status: trip.status, pickup: trip.pickup, destination: trip.destination } : null };
     });
   const open = db.filter('bookings', (b) => b.status === 'requested');
   const requests = [];

@@ -11,14 +11,18 @@ export const DRIVER_SERVICE_FEE_RATE = Number(process.env.DRIVER_SERVICE_FEE_RAT
 
 export const CATEGORIES = {
   Ride: {
+    Go: { base: 20, perKm: 8, perMin: 0.9, minimum: 35, seats: 3, description: 'Compact hatchbacks and sedans, the lowest fare' },
     Comfort: { base: 25, perKm: 9.5, perMin: 1.1, minimum: 45, seats: 4, description: 'Everyday sedans, air-conditioned' },
     XL: { base: 35, perKm: 13, perMin: 1.4, minimum: 70, seats: 6, description: 'Larger vehicles for groups and luggage' },
     Executive: { base: 60, perKm: 18, perMin: 2, minimum: 140, seats: 4, description: 'Premium sedans and professional drivers' },
+    // Monthly scholar and staff transport only (not offered for on-demand rides).
+    Minibus: { base: 60, perKm: 16, perMin: 1.6, minimum: 120, seats: 14, plansOnly: true, description: 'Minibuses for school and staff transport' },
   },
   Delivery: {
     Documents: { base: 30, perKm: 6.5, perMin: 0.6, minimum: 45, seats: 0, description: 'Envelopes and documents up to 1 kg' },
     'Small parcel': { base: 40, perKm: 7.5, perMin: 0.7, minimum: 60, seats: 0, description: 'Boxes up to 5 kg' },
     'Food & retail': { base: 35, perKm: 7, perMin: 0.7, minimum: 50, seats: 0, description: 'Takeaways, groceries and shop orders' },
+    Bakkie: { base: 120, perKm: 14, perMin: 1.5, minimum: 250, seats: 0, description: 'Furniture, appliances and bulky goods, by bakkie' },
   },
   'Premium Drive': {
     'Executive sedan': { base: 90, perKm: 22, perMin: 2.5, minimum: 220, seats: 4, description: 'Luxury sedans with chauffeur' },
@@ -84,13 +88,15 @@ export function quote({ service, category, pickup, destination }) {
   const cats = categoriesFor(service);
   if (!cats) throw Object.assign(new Error('Unknown service.'), { status: 400 });
   const r = route(pickup, destination);
-  const options = Object.entries(cats).map(([name, t]) => {
+  // Plan-only categories (minibus) are priced when asked for by name, never offered for on-demand trips.
+  const options = Object.entries(cats).filter(([name, t]) => !t.plansOnly || name === category).map(([name, t]) => {
     const fare = Math.max(t.minimum, round(t.base + t.perKm * r.distanceKm + t.perMin * r.durationMin, 5));
     const serviceFee = round(fare * DRIVER_SERVICE_FEE_RATE, 0.01);
     return {
       category: name,
       description: t.description,
       seats: t.seats,
+      ...(t.plansOnly && { plansOnly: true }),
       fare,
       passengerCommission: 0,
       driverServiceFee: serviceFee,
@@ -98,6 +104,6 @@ export function quote({ service, category, pickup, destination }) {
       etaMin: 3 + (name.length % 5),
     };
   });
-  const selected = options.find((o) => o.category === category) || options[0];
+  const selected = options.find((o) => o.category === category) || options.find((o) => o.category === 'Comfort') || options[0];
   return { service, ...r, currency: 'ZAR', options, selected, serviceFeeRate: DRIVER_SERVICE_FEE_RATE };
 }

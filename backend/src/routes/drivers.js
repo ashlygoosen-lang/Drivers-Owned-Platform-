@@ -13,6 +13,8 @@ import { getLocation } from '../tracking/locations.js';
 import { view } from './bookings.js';
 import { transition, ACTIVE } from '../bookingState.js';
 import { str, email, phone, password, oneOf, int, wrap, bad, HttpError } from '../validate.js';
+import { vehicleProfile, vehicleLabel, catalogueView, canTake } from '../vehicles.js';
+import { audit, notify } from '../kyc.js';
 
 const router = Router();
 
@@ -45,8 +47,13 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
   if (db.find('applications', (a) => a.userId === user.id && ['submitted', 'under_review', 'approved'].includes(a.status))) {
     throw new HttpError(409, 'You already have an application on file. You can track it in your dashboard.');
   }
-  const vehicle = str(b.vehicle, 'Vehicle make, model & registration', { min: 3, max: 120 });
-  const year = b.vehicleYear ? Number(b.vehicleYear) : null;
+  // A catalogued vehicle (website and current apps), or the older free-text description (older app versions).
+  let profile = null;
+  if (b.vehicleDetails && typeof b.vehicleDetails === 'object') {
+    try { profile = vehicleProfile(b.vehicleDetails); } catch (msg) { throw bad(String(msg)); }
+  }
+  const vehicle = profile ? vehicleLabel(profile) : str(b.vehicle, 'Vehicle make, model & registration', { min: 3, max: 120 });
+  const year = profile ? profile.year : b.vehicleYear ? Number(b.vehicleYear) : null;
   if (year && (year < 2008 || year > new Date().getFullYear() + 1)) throw bad('E-hailing vehicles must be 2008 or newer.');
   const application = db.insert('applications', {
     id: id(),
@@ -56,16 +63,43 @@ router.post('/drivers/apply', optionalAuth, wrap(async (req, res) => {
     city: str(b.city, 'City', { optional: true, max: 60 }),
     vehicle,
     vehicleYear: year,
-    vehicleColour: str(b.vehicleColour, 'Vehicle colour', { optional: true, max: 30 }),
-    seats: b.seats ? int(b.seats, 'Seats', { min: 2, max: 8 }) : null,
+    vehicleColour: profile ? profile.colour : str(b.vehicleColour, 'Vehicle colour', { optional: true, max: 30 }),
+    seats: profile ? profile.seats : b.seats ? int(b.seats, 'Seats', { min: 2, max: 8 }) : null,
+    vehicleProfile: profile,
     documents: {},
     status: 'submitted',
     checks: { identity: 'pending', inspection: 'not scheduled', activation: 'pending review' },
     notes: '',
     createdAt: now(),
   });
-  db.update('users', user.id, { vehicle, driverStatus: 'pending' });
+  db.update('users', user.id, { vehicle, driverStatus: 'pending', ...(profile && { vehicleProfile: profile }) }); // reviewed with the application
   res.status(201).json({ application, token, ...(refreshToken && { refreshToken }), user: publicUser(db.byId('users', user.id)) });
+}));
+
+/** The vehicle catalogue: types, South African makes and models, what each may do, travel operators. */
+router.get('/vehicles/catalogue', (_req, res) => { res.set('Cache-Control', 'public, max-age=3600'); res.json(catalogueView()); });
+
+/** The driver's vehicle, and any change waiting for compliance. */
+router.get('/drivers/vehicle', requireRole('driver'), (req, res) => {
+  res.json({ vehicle: req.user.vehicleProfile || null, legacy: req.user.vehicleProfile ? null : req.user.vehicle || null, pending: req.user.pendingVehicle || null });
+});
+
+/**
+ * Add or change the vehicle. Before approval it updates the application directly. For an approved driver
+ * it waits for compliance (the new vehicle's papers must be checked), and the current vehicle keeps working.
+ */
+router.put('/drivers/vehicle', requireRole('driver'), wrap(async (req, res) => {
+  let profile;
+  try { profile = vehicleProfile(req.body); } catch (msg) { throw bad(String(msg)); }
+  if (req.user.driverStatus !== 'approved') {
+    db.update('users', req.user.id, { vehicleProfile: profile, vehicle: vehicleLabel(profile), pendingVehicle: null });
+    const app = db.filter('applications', (a) => a.userId === req.user.id).pop();
+    if (app) db.update('applications', app.id, { vehicle: vehicleLabel(profile), vehicleYear: profile.year, vehicleColour: profile.colour, seats: profile.seats, vehicleProfile: profile });
+    return res.json({ vehicle: profile, pending: null });
+  }
+  db.update('users', req.user.id, { pendingVehicle: { ...profile, submittedAt: now() } });
+  audit(req.user, 'vehicle_change_requested', req.user.id, { vehicle: vehicleLabel(profile) });
+  res.json({ vehicle: req.user.vehicleProfile || null, pending: db.byId('users', req.user.id).pendingVehicle });
 }));
 
 router.get('/drivers/application', requireRole('driver'), (req, res) => {
@@ -109,6 +143,7 @@ router.post('/drivers/bookings/:id/accept', requireRole('driver'), wrap(async (r
   const booking = await db.byIdFresh('bookings', req.params.id);
   if (!booking || booking.status !== 'requested' || !sameWorld(req.user, db.byId('users', booking.userId))) throw new HttpError(409, 'This request is no longer available.');
   if (booking.requiresScholarVetting && !scholarEligibility(req.user.id).eligible) throw new HttpError(403, 'This is a scholar-transport trip. It needs a driver with approved child-protection and learner-transport documents.');
+  if (!canTake(req.user, booking)) throw new HttpError(403, `Your vehicle isn’t approved for ${booking.service} · ${booking.category} trips.`);
   if (db.find('bookings', (b) => b.driverId === req.user.id && ['accepted', 'arriving', 'in_progress'].includes(b.status))) {
     throw bad('Finish your current trip before accepting another.');
   }

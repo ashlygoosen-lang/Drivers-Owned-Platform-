@@ -1,3 +1,4 @@
+import { imageFor } from './vehicles.js';
 import { db, id, now } from './db.js';
 import { quote } from './pricing.js';
 import { getVerification, recompute, currentDocs } from './kyc.js';
@@ -19,7 +20,7 @@ export const PLAN_DISCOUNT = () => Number(process.env.PLAN_DISCOUNT_RATE ?? 0.15
 export const SKIP_NOTICE_HOURS = () => Number(process.env.PLAN_SKIP_NOTICE_HOURS ?? 12);
 export const CANCEL_NOTICE_HOURS = () => Number(process.env.PLAN_CANCEL_NOTICE_HOURS ?? 24);
 export const GENERATE_BEFORE_MIN = () => Number(process.env.PLAN_TRIP_LEAD_MINUTES ?? 45);
-export const MAX_RIDERS = { Comfort: 4, XL: 6 };
+export const MAX_RIDERS = { Comfort: 4, XL: 6, Minibus: 14 }; // minibus: 14 passengers plus the driver
 const SAST = 2 * 3_600_000;
 
 export const sastDate = (ms = Date.now()) => new Date(ms + SAST).toISOString().slice(0, 10);
@@ -124,7 +125,8 @@ export function planView(p, viewer) {
     riderCount: p.riders.length, pricing: p.pricing, payment: p.payment, paymentStatus: p.paymentStatus,
     skipDates: p.skipDates || [], autoRenew: p.autoRenew, renewedToId: p.renewedToId || null, renewedFromId: p.renewedFromId || null,
     refundedAmount: p.refundedAmount || 0, cancelEffective: p.cancelEffective || null, history: p.history, createdAt: p.createdAt,
-    driver: driver ? { name: driver.name, vehicle: driver.vehicle || '', rating: driver.rating || null } : null,
+    driver: driver ? { name: driver.name, vehicle: driver.vehicle || '', vehicleType: imageFor(driver, { category: p.category }), rating: driver.rating || null } : null,
+    vehicleType: imageFor(driver, { category: p.category }),
   };
   if (isOwner || isDriver || staff) out.riders = p.riders;
   if (isOwner || staff) out.guardian = p.guardian || null;

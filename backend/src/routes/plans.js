@@ -1,3 +1,4 @@
+import { imageFor } from '../vehicles.js';
 import { Router } from 'express';
 import { db, id, now, nextRef } from '../db.js';
 import { requireAuth, requireRole } from '../auth.js';
@@ -53,7 +54,7 @@ function planInput(user, b, { forQuote = false } = {}) {
   if (returnTime) legs.push({ key: 'back', label: kind === 'scholar' ? 'Afternoon: school to home' : 'Evening: work to pickup', from: destination, to: pickup, time: returnTime });
   const ridersIn = forQuote ? Array.from({ length: Math.max(1, Number(b.riderCount) || 1) }, () => ({ name: 'Rider', grade: 'Grade 1' })) : Array.isArray(b.riders) ? b.riders : [];
   if (!ridersIn.length) throw bad(kind === 'scholar' ? 'Add at least one learner.' : 'Add at least one staff member.');
-  if (ridersIn.length > MAX_RIDERS[category]) throw bad(`A ${category} vehicle takes up to ${MAX_RIDERS[category]} ${kind === 'scholar' ? 'learners' : 'passengers'}. Choose XL or split the group into two plans.`);
+  if (ridersIn.length > MAX_RIDERS[category]) throw bad(`A ${category} vehicle takes up to ${MAX_RIDERS[category]} ${kind === 'scholar' ? 'learners' : 'passengers'}. ${category === 'Minibus' ? 'Split the group into two plans.' : 'Choose a bigger vehicle (XL up to 6, Minibus up to 14) or split the group.'}`);
   const riders = ridersIn.map((r, i) => ({
     name: str(r?.name, `${kind === 'scholar' ? 'Learner' : 'Staff member'} ${i + 1} name`, { min: 2, max: 60 }),
     ...(kind === 'scholar' && { grade: oneOf(r?.grade, GRADES, `Learner ${i + 1} grade`) }),
@@ -255,6 +256,26 @@ router.get('/plans/:id', requireAuth, (req, res) => {
     .map((b) => ({ id: b.id, ref: b.ref, date: b.planDate, leg: b.planLeg, status: b.status, scheduledFor: b.scheduledFor, fare: b.fare }));
   res.json({ plan: planView(p, req.user), trips });
 });
+
+/**
+ * Map for a plan: pickup and destination, the vehicle picture (the driver's own vehicle type, or the
+ * plan's category), and the vehicle's live position while one of the plan's trips is under way.
+ */
+router.get('/plans/:id/map', requireAuth, wrap(async (req, res) => {
+  const p = db.byId('plans', String(req.params.id));
+  if (!p || ![p.userId, p.driverId].includes(req.user.id) && !['admin', 'support', 'compliance', 'finance'].includes(req.user.role)) throw new HttpError(404, 'Plan not found.');
+  const leg = p.legs[0];
+  const [pickup, destination] = await Promise.all([locate(leg.from), locate(leg.to)]);
+  const driver = p.driverId ? db.byId('users', p.driverId) : null;
+  const trip = db.find('bookings', (b) => b.planId === p.id && ['accepted', 'arriving', 'in_progress'].includes(b.status));
+  const tripDriver = trip?.driverId ? db.byId('users', trip.driverId) : driver;
+  const loc = trip?.driverId ? await getLocation(trip.driverId) : null;
+  res.json({
+    pickup: pickup && { lat: pickup.lat, lng: pickup.lng, label: leg.from }, destination: destination && { lat: destination.lat, lng: destination.lng, label: leg.to },
+    vehicleType: imageFor(tripDriver, { category: p.category }), vehicle: tripDriver?.vehicle || '',
+    live: trip && loc ? { lat: loc.lat, lng: loc.lng, heading: loc.heading || 0, at: loc.at, bookingId: trip.id, status: trip.status } : null,
+  });
+}));
 
 /** A plan's statement (every trip with status and fare) as CSV, for records or the accounts department. */
 router.get('/plans/:id/statement.csv', requireAuth, (req, res) => {
