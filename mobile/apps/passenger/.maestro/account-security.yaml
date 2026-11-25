@@ -1,0 +1,16 @@
+# Forgot password screen and sign-in errors never reveal whether an account exists.
+appId: za.co.drop.passenger
+---
+- launchApp: { clearState: true }
+- tapOn: "Forgot your password?"
+- tapOn: "Email address"
+- inputText: "nobody-${RANDOM}@example.com"
+- tapOn: "Send reset link"
+- assertVisible: "If an account exists for that email.*"
+- tapOn: "Back to sign in"
+- tapOn: "Email address"
+- inputText: "nobody@example.com"
+- tapOn: "Password"
+- inputText: "Wrong-Password-1"
+- tapOn: "Sign in"
+- assertVisible: "That email and password combination is not recognised."

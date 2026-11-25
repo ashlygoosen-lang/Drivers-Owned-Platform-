@@ -1,0 +1,26 @@
+# End-to-end: sign in → book a cash ride → trip screen → chat → cancel.
+# Run against STAGING with a verified test passenger:  maestro test .maestro/booking.yaml -e EMAIL=... -e PASSWORD=...
+appId: za.co.drop.passenger
+---
+- launchApp: { clearState: true }
+- tapOn: "Email address"
+- inputText: ${EMAIL}
+- tapOn: "Password"
+- inputText: ${PASSWORD}
+- tapOn: "Sign in"
+- assertVisible: "Where to, .*"
+- tapOn: "Pickup"
+- inputText: "Cape Town City Centre"
+- tapOn: "Destination"
+- inputText: "V&A Waterfront"
+- hideKeyboard
+- tapOn: "See fares"
+- assertVisible: "Comfort"
+- tapOn: "Comfort"
+- tapOn: "Cash"
+- tapOn: "Confirm.*"
+- assertVisible: "Finding your driver…"
+- assertVisible: "Cancel trip"
+- tapOn: "Cancel trip"
+- tapOn: "Cancel trip"
+- assertVisible: "This trip was cancelled"
